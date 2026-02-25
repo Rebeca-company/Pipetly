@@ -1,0 +1,73 @@
+"""Module 1 – Query Expansion.
+
+Uses Gemini 1.5 Flash (via OpenRouter) to transform the raw user prompt
+into structured keyword and semantic queries.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+import httpx
+
+from config import get_settings
+from models.query import ExpandedQuery
+from utils.json_utils import extract_json
+
+logger = logging.getLogger(__name__)
+_s = get_settings()
+
+_SYSTEM_PROMPT = """You are an expert biomedical literature search assistant.
+Given a user's natural language research intent, output ONLY a valid JSON object
+with the following schema (no markdown fences, no extra text):
+
+{
+  "intent": "<one-sentence summary of what the user wants>",
+  "keyword_queries": ["<Boolean/keyword query 1>", "..."],
+  "semantic_queries":  ["<NL sentence for vector search 1>", "..."]
+}
+
+Rules:
+- keyword_queries: 3-5 entries using MeSH terms, Boolean operators (AND/OR/NOT), 
+  and field tags where appropriate (e.g. [ti], [ab]).
+- semantic_queries: 2-4 entries as full natural-language sentences describing
+  the biological method, protocol, or technique sought.
+"""
+
+
+class QueryExpander:
+    """Calls Gemini via OpenRouter and returns a validated :class:`ExpandedQuery`."""
+
+    def __init__(self) -> None:
+        self._base = _s.openrouter_base_url.rstrip("/")
+        self._headers = {
+            "Authorization": f"Bearer {_s.openrouter_api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/pipetly",
+            "X-Title": "Pipetly",
+        }
+
+    async def expand(self, user_prompt: str) -> ExpandedQuery:
+        payload: dict[str, Any] = {
+            "model": _s.gemini_model,
+            "messages": [
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.2,
+        }
+        async with httpx.AsyncClient(timeout=_s.http_timeout) as client:
+            resp = await client.post(
+                f"{self._base}/chat/completions",
+                json=payload,
+                headers=self._headers,
+            )
+            if resp.is_error:
+                logger.error(
+                    "OpenRouter error %s – %s", resp.status_code, resp.text
+                )
+                resp.raise_for_status()
+
+        raw_content: str = resp.json()["choices"][0]["message"]["content"]
+        data = extract_json(raw_content)
+        return ExpandedQuery(**data)

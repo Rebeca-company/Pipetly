@@ -137,6 +137,9 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+
+# Pipetly generated output
+output/
 .venv
 env/
 venv/

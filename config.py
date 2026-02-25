@@ -1,0 +1,50 @@
+"""
+Central configuration for Pipetly.
+All secrets are read from environment variables so nothing sensitive lives
+in source code.  Copy .env.example → .env and fill in your keys.
+"""
+from __future__ import annotations
+
+import os
+from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # ── LLM ──────────────────────────────────────────────────────────────────
+    openrouter_api_key: str = Field(..., alias="OPENROUTER_API_KEY")
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Gemini 1.5 Flash has been retired on OpenRouter.
+    # Default is now 2.5 Flash; override via GEMINI_MODEL= in .env.
+    gemini_model: str = "google/gemini-2.5-flash"
+
+    # ── External APIs (all optional – clients degrade gracefully) ─────────────
+    elsevier_api_key: str = Field(default="", alias="ELSEVIER_API_KEY")
+    semantic_scholar_api_key: str = Field(default="", alias="SEMANTIC_SCHOLAR_API_KEY")
+
+    # ── HTTP ──────────────────────────────────────────────────────────────────
+    http_timeout: float = 30.0          # seconds per request
+    http_max_retries: int = 4
+    http_retry_backoff: float = 2.0     # exponential-backoff base
+
+    # ── Pipeline ─────────────────────────────────────────────────────────────
+    max_papers_per_source: int = 10     # fetch limit per API
+    max_citation_depth: int = 3         # recursive citation-investigator depth
+    top_k_protocols: int = 3            # how many to score/return
+
+    # ── Output ────────────────────────────────────────────────────────────────
+    output_dir: str = "output"
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
