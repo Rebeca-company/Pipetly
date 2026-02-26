@@ -130,3 +130,32 @@ def _is_binary(text: str) -> bool:
     # More than 5% non-printable bytes → treat as binary
     non_printable = sum(1 for c in text[:2000] if ord(c) < 9 or (13 < ord(c) < 32))
     return non_printable > len(text[:2000]) * 0.05
+
+
+# ── Stand-alone entry point ───────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import asyncio
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    from utils.intermediate_io import (  # noqa: E402
+        STEP1_FILE,
+        STEP2_FILE,
+        load_model,
+        save_json,
+    )
+
+    async def _main() -> None:
+        expanded = load_model(STEP1_FILE, ExpandedQuery)
+        orchestrator = MultiSourceOrchestrator()
+        papers = await orchestrator.fetch_papers(expanded)
+        save_json(papers, STEP2_FILE)
+        print(f"Fetched {len(papers)} papers.")
+        print(f"Saved → intermediate_outputs/{STEP2_FILE}")
+
+    asyncio.run(_main())

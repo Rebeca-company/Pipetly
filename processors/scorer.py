@@ -111,3 +111,37 @@ class ProtocolScorer:
             score=float(data.get("score", 0.0)),
             reasoning=data.get("reasoning", ""),
         )
+
+
+# ── Stand-alone entry point ───────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import asyncio
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    from utils.intermediate_io import (  # noqa: E402
+        STEP1_FILE,
+        STEP4_FILE,
+        STEP5_FILE,
+        load_model,
+        load_model_list,
+        save_json,
+    )
+    from models.query import ExpandedQuery  # noqa: E402
+
+    async def _main() -> None:
+        intent = load_model(STEP1_FILE, ExpandedQuery).intent
+        protocols = load_model_list(STEP4_FILE, ExtractedProtocol)
+        scorer = ProtocolScorer()
+        scored = await scorer.score_all(protocols, intent)
+        save_json(scored, STEP5_FILE)
+        for sp in scored:
+            print(f"  [{sp.score:.2f}] {sp.protocol.protocol_name}")
+        print(f"\nSaved → intermediate_outputs/{STEP5_FILE}")
+
+    asyncio.run(_main())

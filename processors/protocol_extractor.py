@@ -282,3 +282,37 @@ def _parse_protocol(data: Dict[str, Any]) -> ExtractedProtocol:
         unresolved_citations=data.get("unresolved_citations") or [],
         raw_bibliography=data.get("raw_bibliography"),
     )
+
+
+# ── Stand-alone entry point ───────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import asyncio
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    from utils.intermediate_io import (  # noqa: E402
+        STEP3_FILE,
+        STEP4_FILE,
+        load_model_list,
+        save_json,
+    )
+
+    async def _main() -> None:
+        papers = load_model_list(STEP3_FILE, Paper)
+        extractor = ProtocolExtractor()
+        protocols: list[ExtractedProtocol] = []
+        for paper in papers:
+            logger.info("Extracting from: %s", paper.title[:80])
+            proto = await extractor.extract(paper)
+            if proto:
+                protocols.append(proto)
+        save_json(protocols, STEP4_FILE)
+        print(f"Extracted {len(protocols)} protocols.")
+        print(f"Saved → intermediate_outputs/{STEP4_FILE}")
+
+    asyncio.run(_main())

@@ -78,3 +78,29 @@ class FilterPipeline:
             discarded_methods,
         )
         return accepted
+
+
+# ── Stand-alone entry point ───────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    from utils.intermediate_io import (  # noqa: E402
+        STEP2_FILE,
+        STEP3_FILE,
+        load_model_list,
+        save_json,
+    )
+
+    _papers = load_model_list(STEP2_FILE, Paper)
+    _pipeline = FilterPipeline()
+    _filtered = _pipeline.run(_papers)
+    save_json(_filtered, STEP3_FILE)
+    print(f"{len(_filtered)} papers passed filters.")
+    print(f"Saved → intermediate_outputs/{STEP3_FILE}")

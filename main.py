@@ -23,6 +23,14 @@ from processors import (
     ProtocolScorer,
     QueryExpander,
 )
+from utils.intermediate_io import (
+    STEP1_FILE,
+    STEP2_FILE,
+    STEP3_FILE,
+    STEP4_FILE,
+    STEP5_FILE,
+    save_json,
+)
 from utils.output_formatter import write_markdown_output
 
 logging.basicConfig(
@@ -47,18 +55,21 @@ async def run_pipeline(user_prompt: str) -> Path:
     logger.info("Intent  : %s", expanded.intent)
     logger.info("Keywords: %s", expanded.keyword_queries)
     logger.info("Semantic: %s", expanded.semantic_queries)
+    save_json(expanded, STEP1_FILE)
 
     # ── Step 2: Multi-Source Fetch ────────────────────────────────────────────
     logger.info("=== Step 2/5 – Multi-Source Orchestration ===")
     orchestrator = MultiSourceOrchestrator()
     raw_papers = await orchestrator.fetch_papers(expanded)
     logger.info("Fetched %d raw papers across all sources.", len(raw_papers))
+    save_json(raw_papers, STEP2_FILE)
 
     # ── Step 3: Filtering ─────────────────────────────────────────────────────
     logger.info("=== Step 3/5 – Strict Filtering Pipeline ===")
     pipeline = FilterPipeline()
     filtered = pipeline.run(raw_papers)
     logger.info("%d papers passed filters.", len(filtered))
+    save_json(filtered, STEP3_FILE)
 
     if not filtered:
         logger.warning("No papers passed the filter. Try a broader query.")
@@ -75,6 +86,7 @@ async def run_pipeline(user_prompt: str) -> Path:
             protocols.append(proto)
 
     logger.info("Extracted %d protocols.", len(protocols))
+    save_json(protocols, STEP4_FILE)
     if not protocols:
         raise RuntimeError("No protocols could be extracted from the filtered papers.")
 
@@ -85,6 +97,7 @@ async def run_pipeline(user_prompt: str) -> Path:
     logger.info("Top %d protocols scored.", len(scored))
     for sp in scored:
         logger.info("  [%.2f] %s", sp.score, sp.protocol.protocol_name)
+    save_json(scored, STEP5_FILE)
 
     output_path = write_markdown_output(scored, expanded.intent, _s.output_dir)
     logger.info("Output written to: %s", output_path)

@@ -71,3 +71,35 @@ class QueryExpander:
         raw_content: str = resp.json()["choices"][0]["message"]["content"]
         data = extract_json(raw_content)
         return ExpandedQuery(**data)
+
+
+# ── Stand-alone entry point ───────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import asyncio
+    import sys
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    from utils.intermediate_io import STEP1_FILE, save_json  # noqa: E402
+
+    if len(sys.argv) < 2:
+        print('Usage: python processors/query_expander.py "<your research question>"')
+        sys.exit(1)
+
+    _prompt = " ".join(sys.argv[1:])
+
+    async def _main() -> None:
+        expander = QueryExpander()
+        expanded = await expander.expand(_prompt)
+        save_json(expanded, STEP1_FILE)
+        print(f"Intent  : {expanded.intent}")
+        print(f"Keywords: {expanded.keyword_queries}")
+        print(f"Semantic: {expanded.semantic_queries}")
+        print(f"\nSaved → intermediate_outputs/{STEP1_FILE}")
+
+    asyncio.run(_main())

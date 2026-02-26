@@ -140,6 +140,7 @@ celerybeat.pid
 
 # Pipetly generated output
 output/
+intermediate_outputs/
 .venv
 env/
 venv/
