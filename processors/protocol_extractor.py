@@ -7,6 +7,7 @@ Uses Gemini to:
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
@@ -19,7 +20,6 @@ from api_clients.openalex import OpenAlexClient
 from config import get_settings
 from models.paper import FullText, FullTextFormat, Paper
 from models.protocol import ExtractedProtocol, ProtocolStep
-from utils.json_utils import extract_json
 
 logger = logging.getLogger(__name__)
 _s = get_settings()
@@ -27,35 +27,71 @@ _s = get_settings()
 # ── Prompt templates ──────────────────────────────────────────────────────────
 
 _EXTRACT_SYSTEM = """You are a biomedical protocol extraction engine.
-Given the full text of a scientific paper, extract the experimental protocol.
-Output ONLY a valid JSON object matching this schema (no markdown, no preamble):
-
-{
-  "protocol_name": "<concise name for the protocol>",
-  "steps": [
-    {
-      "step_number": 1,
-      "description": "<what is done in this step>",
-      "reagents": ["<reagent1>"],
-      "equipment": ["<equipment1>"],
-      "duration": "<optional time string>",
-      "notes": "<optional notes>",
-      "citation_ref": "<e.g. [14] if the step defers to another paper, else null>"
-    }
-  ],
-  "unresolved_citations": ["[14]", "[22]"],
-  "raw_bibliography": "<the full bibliography / references section as plain text>"
-}
-
-Be exhaustive with steps. Mark citation_ref when a step says something like
-'as previously described [14]' or 'following the method of Smith et al. [14]'.
+Given the full text of a scientific paper, extract the experimental protocol exhaustively.
+Mark citation_ref on any step that defers to another paper
+(e.g. 'as previously described [14]') using the bracket notation, e.g. '[14]'.
+Include the full bibliography/references section verbatim in raw_bibliography.
 """
 
 _REFINE_SYSTEM = """You previously extracted a protocol step that deferred to an
 external citation. Below is the full text of THAT cited paper.
 Expand the step marked with citation_ref using the new information.
-Output ONLY the updated JSON protocol (same schema, same step list).
+Return the updated protocol using the same schema.
 """
+
+_STEP_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "step_number": {"type": "integer"},
+        "description": {"type": "string", "description": "What is done in this step."},
+        "reagents": {"type": "array", "items": {"type": "string"}},
+        "equipment": {"type": "array", "items": {"type": "string"}},
+        "duration": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "Optional time string for the step.",
+        },
+        "notes": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "Optional additional notes.",
+        },
+        "citation_ref": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "Bracket citation if the step defers to another paper, e.g. '[14]'.",
+        },
+    },
+    "required": ["step_number", "description", "reagents", "equipment", "duration", "notes", "citation_ref"],
+    "additionalProperties": False,
+}
+
+_EXTRACTED_PROTOCOL_SCHEMA: dict = {
+    "name": "extracted_protocol",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "protocol_name": {
+                "type": "string",
+                "description": "Concise name for the extracted protocol.",
+            },
+            "steps": {
+                "type": "array",
+                "items": _STEP_SCHEMA,
+                "description": "Exhaustive ordered list of protocol steps.",
+            },
+            "unresolved_citations": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Citation markers that require external resolution.",
+            },
+            "raw_bibliography": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "description": "Full references section as plain text.",
+            },
+        },
+        "required": ["protocol_name", "steps", "unresolved_citations", "raw_bibliography"],
+        "additionalProperties": False,
+    },
+}
 
 
 # ── Citation key → DOI resolver ───────────────────────────────────────────────
@@ -128,6 +164,7 @@ class ProtocolExtractor:
                 {"role": "user", "content": text[:120_000]},  # stay within context
             ],
             "temperature": 0.1,
+            "response_format": {"type": "json_schema", "json_schema": _EXTRACTED_PROTOCOL_SCHEMA},
         }
         try:
             async with httpx.AsyncClient(timeout=_s.http_timeout * 2) as client:
@@ -142,7 +179,7 @@ class ProtocolExtractor:
                     )
                     resp.raise_for_status()
             raw = resp.json()["choices"][0]["message"]["content"]
-            data = extract_json(raw)
+            data = json.loads(raw)
             return _parse_protocol(data)
         except Exception as exc:  # noqa: BLE001
             logger.error("Gemini extraction failed: %s", exc)

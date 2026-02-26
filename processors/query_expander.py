@@ -5,6 +5,7 @@ into structured keyword and semantic queries.
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -12,27 +13,45 @@ import httpx
 
 from config import get_settings
 from models.query import ExpandedQuery
-from utils.json_utils import extract_json
 
 logger = logging.getLogger(__name__)
 _s = get_settings()
 
 _SYSTEM_PROMPT = """You are an expert biomedical literature search assistant.
-Given a user's natural language research intent, output ONLY a valid JSON object
-with the following schema (no markdown fences, no extra text):
-
-{
-  "intent": "<one-sentence summary of what the user wants>",
-  "keyword_queries": ["<Boolean/keyword query 1>", "..."],
-  "semantic_queries":  ["<NL sentence for vector search 1>", "..."]
-}
+Given a user's natural language research intent, expand it into structured search queries.
 
 Rules:
-- keyword_queries: 3-5 entries using MeSH terms, Boolean operators (AND/OR/NOT), 
+- keyword_queries: 3-5 entries using MeSH terms, Boolean operators (AND/OR/NOT),
   and field tags where appropriate (e.g. [ti], [ab]).
 - semantic_queries: 2-4 entries as full natural-language sentences describing
   the biological method, protocol, or technique sought.
 """
+
+_EXPANDED_QUERY_SCHEMA: dict = {
+    "name": "expanded_query",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "intent": {
+                "type": "string",
+                "description": "One-sentence summary of the user's research intent.",
+            },
+            "keyword_queries": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "3-5 Boolean/keyword search strings using MeSH terms and field tags.",
+            },
+            "semantic_queries": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "2-4 natural-language sentences for semantic/vector search.",
+            },
+        },
+        "required": ["intent", "keyword_queries", "semantic_queries"],
+        "additionalProperties": False,
+    },
+}
 
 
 class QueryExpander:
@@ -55,6 +74,7 @@ class QueryExpander:
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.2,
+            "response_format": {"type": "json_schema", "json_schema": _EXPANDED_QUERY_SCHEMA},
         }
         async with httpx.AsyncClient(timeout=_s.http_timeout) as client:
             resp = await client.post(
@@ -69,7 +89,7 @@ class QueryExpander:
                 resp.raise_for_status()
 
         raw_content: str = resp.json()["choices"][0]["message"]["content"]
-        data = extract_json(raw_content)
+        data = json.loads(raw_content)
         return ExpandedQuery(**data)
 
 

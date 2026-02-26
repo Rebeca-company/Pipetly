@@ -5,6 +5,7 @@ intent and assigns a relevance score.
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, List
 
@@ -12,7 +13,6 @@ import httpx
 
 from config import get_settings
 from models.protocol import ExtractedProtocol, ScoredProtocol
-from utils.json_utils import extract_json
 
 logger = logging.getLogger(__name__)
 _s = get_settings()
@@ -21,18 +21,32 @@ _SCORE_SYSTEM = """You are an expert reviewer of biomedical experimental protoco
 Given a user's research intent and an extracted protocol, evaluate how well the
 protocol matches the intent.
 
-Respond ONLY with a valid JSON object (no markdown fences):
-{
-  "score": <float between 0.0 and 1.0>,
-  "reasoning": "<2-3 sentence explanation>"
-}
-
 Scoring rubric:
 1.0 = Perfect match – the protocol directly addresses the stated intent.
 0.7 = Good match – the protocol is relevant but may cover a broader technique.
 0.4 = Partial match – tangentially related.
 0.0 = Not relevant.
 """
+
+_PROTOCOL_SCORE_SCHEMA: dict = {
+    "name": "protocol_score",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "score": {
+                "type": "number",
+                "description": "Relevance score from 0.0 (not relevant) to 1.0 (perfect match).",
+            },
+            "reasoning": {
+                "type": "string",
+                "description": "2-3 sentence explanation of the assigned score.",
+            },
+        },
+        "required": ["score", "reasoning"],
+        "additionalProperties": False,
+    },
+}
 
 
 class ProtocolScorer:
@@ -91,6 +105,7 @@ class ProtocolScorer:
                 {"role": "user", "content": user_message},
             ],
             "temperature": 0.0,
+            "response_format": {"type": "json_schema", "json_schema": _PROTOCOL_SCORE_SCHEMA},
         }
         async with httpx.AsyncClient(timeout=_s.http_timeout) as client:
             resp = await client.post(
@@ -105,7 +120,7 @@ class ProtocolScorer:
                 resp.raise_for_status()
 
         raw = resp.json()["choices"][0]["message"]["content"]
-        data = extract_json(raw)
+        data = json.loads(raw)
         return ScoredProtocol(
             protocol=protocol,
             score=float(data.get("score", 0.0)),
