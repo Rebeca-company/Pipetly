@@ -13,13 +13,13 @@ class ExpandedQuery(BaseModel):
         ...,
         description="One-sentence summary of what the user is looking for.",
     )
-    keyword_queries: List[str] = Field(
+    structured_boolean: List[str] = Field(
         ...,
         min_length=1,
-        description="Boolean / keyword search strings suitable for PubMed-style APIs.",
+        description="Boolean search strings suitable for PubMed-style APIs.",
     )
-    semantic_queries: List[str] = Field(
+    concept_strings: List[str] = Field(
         ...,
         min_length=1,
-        description="Natural-language sentences optimised for vector / semantic search.",
+        description="Clean keyword strings for OpenAlex/Crossref/Unpaywall.",
     )

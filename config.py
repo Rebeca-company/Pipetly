@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # ── External APIs (all optional – clients degrade gracefully) ─────────────
     elsevier_api_key: str = Field(default="", alias="ELSEVIER_API_KEY")
     semantic_scholar_api_key: str = Field(default="", alias="SEMANTIC_SCHOLAR_API_KEY")
+    # Unpaywall requires a contact e-mail instead of an API key
+    unpaywall_email: str = Field(default="", alias="UNPAYWALL_EMAIL")
+    core_api_key: str = Field(default="", alias="CORE_API_KEY")
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
     http_timeout: float = 30.0          # seconds per request

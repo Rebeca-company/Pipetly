@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import logging
+import time as _time
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
 import httpx
 
 from config import get_settings
-from models.paper import Paper
+from models.paper import FullText, Paper
 from utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,8 @@ class BaseAPIClient(ABC):
     def __init__(self) -> None:
         self._limiter = RateLimiter(calls=self.RATE_CALLS, period=self.RATE_PERIOD)
         self._client: Optional[httpx.AsyncClient] = None
+        # Diagnostic log: each entry has url, response_time_ms, is_error
+        self._request_stats: list[dict] = []
 
     # ── Context manager ───────────────────────────────────────────────────────
 
@@ -46,14 +49,17 @@ class BaseAPIClient(ABC):
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     async def _get(self, url: str, **kwargs: object) -> httpx.Response:
-        """Rate-limited GET with exponential-backoff retry."""
+        """Rate-limited GET with exponential-backoff retry and timing instrumentation."""
         assert self._client is not None, "Use client as async context manager."
         await self._limiter.acquire()
+        t0 = _time.monotonic()
         last_exc: Exception = RuntimeError("unreachable")
         for attempt in range(_settings.http_max_retries):
             try:
                 resp = await self._client.get(url, **kwargs)  # type: ignore[arg-type]
                 resp.raise_for_status()
+                elapsed_ms = (_time.monotonic() - t0) * 1000
+                self._request_stats.append({"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": False})
                 return resp
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == 429:
@@ -63,6 +69,8 @@ class BaseAPIClient(ABC):
                     await asyncio.sleep(wait)
                     last_exc = exc
                 else:
+                    elapsed_ms = (_time.monotonic() - t0) * 1000
+                    self._request_stats.append({"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True})
                     raise
             except httpx.RequestError as exc:
                 import asyncio
@@ -70,7 +78,16 @@ class BaseAPIClient(ABC):
                 logger.warning("Request error for %s: %s – retrying in %.1fs", url, exc, wait)
                 await asyncio.sleep(wait)
                 last_exc = exc
+        elapsed_ms = (_time.monotonic() - t0) * 1000
+        self._request_stats.append({"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True})
         raise last_exc
+
+    # ── Abstract interface ────────────────────────────────────────────────────
+
+    async def _get_bytes(self, url: str, **kwargs: object) -> bytes:
+        """Rate-limited GET returning raw bytes (for binary content such as PDFs)."""
+        resp = await self._get(url, **kwargs)
+        return resp.content
 
     # ── Abstract interface ────────────────────────────────────────────────────
 
@@ -79,9 +96,5 @@ class BaseAPIClient(ABC):
         """Keyword / boolean search; return a list of :class:`Paper` objects."""
 
     @abstractmethod
-    async def fetch_full_text(self, paper: Paper) -> Optional[str]:
-        """
-        Attempt to retrieve full text for *paper*.
-
-        Returns plain-text content, or *None* when unavailable.
-        """
+    async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
+        """Fetch full text for *paper*; return a :class:`FullText` or ``None``."""

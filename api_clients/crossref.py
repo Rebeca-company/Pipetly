@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from models.paper import Paper
+from models.paper import FullText, Paper
 from .base import BaseAPIClient
 
 logger = logging.getLogger(__name__)
@@ -63,9 +63,8 @@ class CrossRefClient(BaseAPIClient):
             )
         return papers
 
-    async def fetch_full_text(self, paper: Paper) -> Optional[str]:
-        """CrossRef doesn't host full text, but can resolve a DOI to a landing URL."""
-        # Nothing to return as raw text; leave full-text fetch to other clients.
+    async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
+        """CrossRef doesn't host full text; leave full-text fetch to other clients."""
         return None
 
     async def resolve_doi(self, doi: str) -> Optional[Paper]:

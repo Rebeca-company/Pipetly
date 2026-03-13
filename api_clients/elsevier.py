@@ -10,7 +10,7 @@ import logging
 from typing import List, Optional
 
 from config import get_settings
-from models.paper import Paper
+from models.paper import FullText, FullTextFormat, Paper
 from .base import BaseAPIClient
 
 logger = logging.getLogger(__name__)
@@ -27,10 +27,13 @@ class ElsevierClient(BaseAPIClient):
     RATE_PERIOD = 1.0
 
     def _headers(self, accept: str = "application/json") -> dict[str, str]:
-        return {
+        headers = {
             "X-ELS-APIKey": _settings.elsevier_api_key,
             "Accept": accept,
         }
+        if hasattr(_settings, 'elsevier_inst_token') and _settings.elsevier_inst_token:
+            headers["X-ELS-Insttoken"] = _settings.elsevier_inst_token
+        return headers
 
     async def search(self, query: str, max_results: int = 10) -> List[Paper]:
         if not _settings.elsevier_api_key:
@@ -40,7 +43,7 @@ class ElsevierClient(BaseAPIClient):
         params = {
             "query": query,
             "count": min(max_results, 25),
-            "field": "doi,title,creator,coverDate,description",
+            "field": "doi,title,creator,authors,coverDate,description",
         }
         try:
             resp = await self._get(_SEARCH_URL, params=params, headers=self._headers())
@@ -55,11 +58,24 @@ class ElsevierClient(BaseAPIClient):
         papers: list[Paper] = []
         for item in results:
             doi = item.get("prism:doi") or item.get("dc:identifier", "").replace("DOI:", "")
+            raw_authors = (item.get("authors") or {}).get("author", [])
+            if raw_authors:
+                authors = [
+                    (
+                        f"{a.get('given-name', '')} {a.get('surname', '')}".strip()
+                        or a.get("$", "")
+                    ).strip()
+                    for a in raw_authors
+                    if a.get("given-name") or a.get("surname") or a.get("$")
+                ]
+            else:
+                creator = item.get("dc:creator", "")
+                authors = [creator] if creator else []
             papers.append(
                 Paper(
                     doi=doi or None,
                     title=item.get("dc:title", "Untitled"),
-                    authors=[item.get("dc:creator", "")] if item.get("dc:creator") else [],
+                    authors=authors,
                     abstract=item.get("dc:description"),
                     year=_year_from_date(item.get("prism:coverDate")),
                     source="elsevier",
@@ -68,13 +84,16 @@ class ElsevierClient(BaseAPIClient):
             )
         return papers
 
-    async def fetch_full_text(self, paper: Paper) -> Optional[str]:
+    async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
         if not _settings.elsevier_api_key or not paper.doi:
             return None
         url = _ARTICLE_URL.format(doi=paper.doi)
         try:
             resp = await self._get(url, headers=self._headers("text/plain"))
-            return resp.text
+            text = resp.text.strip()
+            if not text:
+                return None
+            return FullText(format=FullTextFormat.PLAIN, content=text)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Elsevier full-text fetch failed for %s: %s", paper.doi, exc)
             return None

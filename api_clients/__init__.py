@@ -4,6 +4,10 @@ from .semantic_scholar import SemanticScholarClient
 from .elsevier import ElsevierClient
 from .crossref import CrossRefClient
 from .openalex import OpenAlexClient
+from .scopus import ScopusClient
+from .pmc import PMCClient
+from .unpaywall import UnpaywallClient
+from .core import COREClient
 
 __all__ = [
     "BaseAPIClient",
@@ -12,4 +16,8 @@ __all__ = [
     "ElsevierClient",
     "CrossRefClient",
     "OpenAlexClient",
+    "ScopusClient",
+    "PMCClient",
+    "UnpaywallClient",
+    "COREClient",
 ]

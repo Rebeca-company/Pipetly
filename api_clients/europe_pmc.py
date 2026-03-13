@@ -5,6 +5,7 @@ Docs: https://europepmc.org/RestfulWebService
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional
 
 from models.paper import FullText, FullTextFormat, Paper
@@ -13,7 +14,7 @@ from .base import BaseAPIClient
 logger = logging.getLogger(__name__)
 
 _SEARCH_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
-_FULL_TEXT_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/{source}/{pmcid}/fullTextXML"
+_FULL_TEXT_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
 
 
 class EuropePMCClient(BaseAPIClient):
@@ -27,7 +28,7 @@ class EuropePMCClient(BaseAPIClient):
             "query": query,
             "format": "json",
             "pageSize": min(max_results, 25),
-            "resultType": "core",
+            "resultType": "core",  # "idlist" only returns IDs; "core" includes title/authors/abstract/year
         }
         try:
             resp = await self._get(_SEARCH_URL, params=params)
@@ -65,28 +66,55 @@ class EuropePMCClient(BaseAPIClient):
             )
         return papers
 
-    async def fetch_full_text(self, paper: Paper) -> Optional[str]:
-        """Fetch PMC XML full-text. Only works for open-access PMC articles."""
-        if not paper.url:
-            return None
-        # URL is https://europepmc.org/article/PMC/PMCxxxxxxx for OA papers
-        parts = paper.url.rstrip("/").split("/")
-        pmc_id: Optional[str] = None
-        if "PMC" in parts:
-            idx = parts.index("PMC")
-            if idx + 1 < len(parts):
-                candidate = parts[idx + 1]
-                if candidate.startswith("PMC") and candidate[3:].isdigit():
-                    pmc_id = candidate
+    async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
+        """Fetch PMC XML full-text. Works for any open-access PMC article;
+        looks up the PMCID by DOI when the stored URL is not a PMC URL."""
+        pmc_id = _extract_pmcid(paper.url)
 
-        if pmc_id:
-            url = _FULL_TEXT_URL.format(source="PMC", pmcid=pmc_id)
+        if not pmc_id and paper.doi:
+            # Search Europe PMC by DOI to find the PMCID
             try:
-                resp = await self._get(url)
-                return resp.text
+                resp = await self._get(
+                    _SEARCH_URL,
+                    params={
+                        "query": f"DOI:{paper.doi}",
+                        "format": "json",
+                        "pageSize": "1",
+                        "resultType": "core",
+                    },
+                )
+                results = resp.json().get("resultList", {}).get("result", [])
+                if results:
+                    hit = results[0]
+                    pmc_id = hit.get("pmcid") or (
+                        hit.get("id") if hit.get("source") == "PMC" else None
+                    )
             except Exception as exc:  # noqa: BLE001
-                logger.warning("EuropePMC full-text fetch failed for %s: %s", pmc_id, exc)
+                logger.debug("EuropePMC DOI lookup failed for %s: %s", paper.doi, exc)
+
+        if not pmc_id:
+            return None
+
+        url = _FULL_TEXT_URL.format(pmcid=pmc_id)
+        try:
+            resp = await self._get(url)
+            xml_text = resp.text.strip()
+            if not xml_text:
+                return None
+            return FullText(format=FullTextFormat.XML, content=xml_text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("EuropePMC full-text fetch failed for %s: %s", pmc_id, exc)
         return None
+
+
+def _extract_pmcid(url: Optional[str]) -> Optional[str]:
+    """Extract a PMCxxxxxxx identifier from any known article URL pattern."""
+    if not url:
+        return None
+    match = re.search(r"PMC\d+", url, re.IGNORECASE)
+    if match:
+        return match.group(0).upper()
+    return None
 
 
 def _safe_int(value: object) -> Optional[int]:

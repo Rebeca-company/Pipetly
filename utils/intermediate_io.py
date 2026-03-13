@@ -45,10 +45,12 @@ INTERMEDIATE_DIR: Path = Path(__file__).resolve().parent.parent / "intermediate_
 # Well-known filenames for each pipeline step
 # ---------------------------------------------------------------------------
 STEP1_FILE = "step1_expanded_query.json"
-STEP2_FILE = "step2_raw_papers.json"
-STEP3_FILE = "step3_filtered_papers.json"
-STEP4_FILE = "step4_protocols.json"
-STEP5_FILE = "step5_scored_protocols.json"
+STEP2_FILE = "step2_raw_papers.json"            # PaperSearcher  – raw metadata
+STEP3_FILE = "step3_doi_filtered_papers.json"   # MetadataFilter – dedup + DOI
+STEP4_FILE = "step4_fulltext_raw_papers.json"   # FullTextRetriever – raw PDF/XML/HTML
+STEP5_FILE = "step5_fulltext_clean_papers.json" # TextExtractor  – clean plain text
+STEP6_FILE = "step6_protocols.json"             # ProtocolExtractor output
+STEP7_FILE = "step7_scored_protocols.json"      # ProtocolScorer output
 
 
 # ---------------------------------------------------------------------------

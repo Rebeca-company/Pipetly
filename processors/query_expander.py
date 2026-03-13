@@ -17,17 +17,37 @@ from models.query import ExpandedQuery
 logger = logging.getLogger(__name__)
 _s = get_settings()
 
-_SYSTEM_PROMPT = """You are an expert biomedical literature search assistant.
-Given a user's natural language research intent, expand it into structured search queries.
+_SYSTEM_PROMPT = _SYSTEM_PROMPT = """You are an expert academic search architect specializing in multi-database query optimization.  
 
-Rules:
-- keyword_queries: 3-5 entries using MeSH terms, Boolean operators (AND/OR/NOT),
-  and field tags where appropriate (e.g. [ti], [ab]).
-- semantic_queries: 2-4 entries as full natural-language sentences describing
-  the biological method, protocol, or technique sought.
+## Your job
+Given a description of an experimental technique or research need, generate optimized search queries to retrieve relevant scientific papers.
+
+## Query construction rules
+
+### structured_boolean (Europe PMC, Scopus, PubMed)
+- Use AND between layers, OR within each layer for synonyms and related terms
+- Use field tags [title] or [abstract] on the most specific terms
+- Generate queries ranging from broad (1–2 layers) to narrow (3–4 layers)
+- Include MeSH terms where applicable, paired with free-text synonyms
+
+### concept_strings (OpenAlex, CrossRef, Semantic Scholar)
+- 2–5 terms per string, no operators, no full sentences
+- Include synonyms and established abbreviations as separate strings
+
+## Output rules
+- Generate 3–5 queries per category, varying from broad to narrow in specificity.
+- Vary synonyms and adjacent concepts across strings
+- Do not repeat the same phrase across more than 3 queries in a category
+- Every term must belong to the biological domain of the user's question
+- Prioritize specificity: a narrow query that returns 50 highly relevant papers is better than a broad one returning 5000 mixed results
+
+## What NOT to include in queries
+- Do not add methodological terms (e.g., "protocol", "assay", "sequencing")
+- Do not add study-type terms (e.g., "study", "analysis", "investigation", "research", "review") — these are noise, not signal
+- Do not add generic scientific verbs (e.g., "role of", "effect of", "impact of") unless they are part of an established technical term
 """
 
-_EXPANDED_QUERY_SCHEMA: dict = {
+_EXPANDED_QUERY_SCHEMA:dict = {
     "name": "expanded_query",
     "strict": True,
     "schema": {
@@ -37,18 +57,18 @@ _EXPANDED_QUERY_SCHEMA: dict = {
                 "type": "string",
                 "description": "One-sentence summary of the user's research intent.",
             },
-            "keyword_queries": {
+            "structured_boolean": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "3-5 Boolean/keyword search strings using MeSH terms and field tags.",
+                "description": "Queries optimized for Europe PMC/Scopus (e.g., '(term1 OR term2) AND method[title]')",
             },
-            "semantic_queries": {
+            "concept_strings": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "2-4 natural-language sentences for semantic/vector search.",
+                "description": "Clean keyword strings for OpenAlex/Crossref/Unpaywall.",
             },
         },
-        "required": ["intent", "keyword_queries", "semantic_queries"],
+        "required": ["intent", "structured_boolean", "concept_strings"],
         "additionalProperties": False,
     },
 }
@@ -118,8 +138,8 @@ if __name__ == "__main__":
         expanded = await expander.expand(_prompt)
         save_json(expanded, STEP1_FILE)
         print(f"Intent  : {expanded.intent}")
-        print(f"Keywords: {expanded.keyword_queries}")
-        print(f"Semantic: {expanded.semantic_queries}")
+        print(f"structured_boolean: {expanded.structured_boolean}")
+        print(f"concept_strings: {expanded.concept_strings}")
         print(f"\nSaved → intermediate_outputs/{STEP1_FILE}")
 
     asyncio.run(_main())

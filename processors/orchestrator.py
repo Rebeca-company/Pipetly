@@ -1,141 +1,67 @@
-"""Module 2 – Multi-Source API Orchestrator.
+"""Multi-Source Paper Search Orchestrator.
 
-Fans out search queries across all configured API clients, collects metadata,
-and attempts to retrieve full text for each paper.
+Convenience wrapper that coordinates the four modular pipeline steps:
+
+1. :class:`~processors.paper_searcher.PaperSearcher`   – search all APIs for metadata
+2. :class:`~processors.metadata_filter.MetadataFilter` – dedup + DOI filter
+3. :class:`~processors.full_text_retriever.FullTextRetriever` – raw full-text fetch
+4. :class:`~processors.text_extractor.TextExtractor`   – convert to clean plain text
+
+Use this class when you want a single entry point that runs all four steps
+end-to-end, or call each step class directly for fine-grained control.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Dict, List
+from typing import List
 
-from config import get_settings
-from models.paper import FullText, FullTextFormat, Paper
+from models.paper import Paper
 from models.query import ExpandedQuery
-from api_clients import (
-    CrossRefClient,
-    ElsevierClient,
-    EuropePMCClient,
-    OpenAlexClient,
-    SemanticScholarClient,
-)
+from .paper_searcher import PaperSearcher
+from .metadata_filter import MetadataFilter
+from .full_text_retriever import FullTextRetriever
+from .text_extractor import TextExtractor
 
 logger = logging.getLogger(__name__)
-_s = get_settings()
 
 
 class MultiSourceOrchestrator:
-    """Fan out queries to all sources and aggregate results."""
+    """Run all four paper-search pipeline steps and return papers with clean text."""
 
     async def fetch_papers(self, expanded_query: ExpandedQuery) -> List[Paper]:
         """
-        Search every API with the keyword queries, collect metadata,
-        then attempt to fetch full text for each unique paper.
+        Execute the four-step paper search pipeline:
+
+        1. **Search** – fan out queries across all API clients.
+        2. **Filter** – deduplicate and require a DOI.
+        3. **Retrieve** – fetch raw full-text (PDF / XML / HTML / plain).
+        4. **Extract** – convert to normalised plain text; abstract fallback.
+
+        Returns papers ready for protocol extraction.
         """
-        all_papers: list[Paper] = []
+        # Step 1 – Paper and Metadata Search
+        papers = await PaperSearcher().search(expanded_query)
 
-        async with (
-            EuropePMCClient() as epmc,
-            SemanticScholarClient() as s2,
-            ElsevierClient() as els,
-            CrossRefClient() as cr,
-            OpenAlexClient() as oa,
-        ):
-            # ── Phase 1: metadata search ──────────────────────────────────────
-            search_tasks = []
-            clients_labels = []
-            for q in expanded_query.keyword_queries:
-                search_tasks.append(epmc.search(q, _s.max_papers_per_source))
-                clients_labels.append(f"europe_pmc|{q[:40]}")
-                search_tasks.append(s2.search(q, _s.max_papers_per_source))
-                clients_labels.append(f"semantic_scholar|{q[:40]}")
-                search_tasks.append(els.search(q, _s.max_papers_per_source))
-                clients_labels.append(f"elsevier|{q[:40]}")
-                search_tasks.append(cr.search(q, _s.max_papers_per_source))
-                clients_labels.append(f"crossref|{q[:40]}")
-                search_tasks.append(oa.search(q, _s.max_papers_per_source))
-                clients_labels.append(f"openalex|{q[:40]}")
+        # Step 2 – Metadata Filtering (dedup + DOI)
+        papers = MetadataFilter().run(papers)
+        if not papers:
+            logger.warning("No papers with a DOI found after metadata filtering.")
+            return []
 
-            results = await asyncio.gather(*search_tasks, return_exceptions=True)
-            for label, result in zip(clients_labels, results):
-                if isinstance(result, Exception):
-                    logger.warning("Search error [%s]: %s", label, result)
-                else:
-                    all_papers.extend(result)  # type: ignore[arg-type]
+        # Step 3 – Full-Text Retrieval
+        papers = await FullTextRetriever().retrieve(papers)
 
-            # ── Phase 2: full-text retrieval ──────────────────────────────────
-            # Map client instance to its papers for targeted fetch
-            client_map: Dict[str, object] = {
-                "europe_pmc": epmc,
-                "semantic_scholar": s2,
-                "elsevier": els,
-                "crossref": cr,
-                "openalex": oa,
-            }
+        # Step 4 – Text Extraction (PDF / XML / HTML → plain text)
+        papers = TextExtractor().extract_all(papers)
 
-            ft_tasks = []
-            ft_papers = []
-            for paper in all_papers:
-                client = client_map.get(paper.source)
-                if client is not None:
-                    ft_tasks.append(
-                        _fetch_full_text_safe(client, paper)  # type: ignore[arg-type]
-                    )
-                    ft_papers.append(paper)
-
-            ft_results = await asyncio.gather(*ft_tasks, return_exceptions=True)
-            for paper, text in zip(ft_papers, ft_results):
-                if isinstance(text, str) and text and not _is_binary(text):
-                    paper.full_text = FullText(
-                        format=FullTextFormat.XML
-                        if text.lstrip().startswith("<")
-                        else FullTextFormat.PLAIN,
-                        content=text,
-                    )
-
-        # ── Phase 3: abstract fallback ────────────────────────────────────────
-        # Papers without fetched full text but with a usable abstract are kept;
-        # the extractor will work from the abstract and the Citation Investigator
-        # can still resolve referenced papers.
-        abstract_used = 0
-        for paper in all_papers:
-            if paper.full_text is None and paper.abstract and len(paper.abstract) > 100:
-                paper.full_text = FullText(
-                    format=FullTextFormat.PLAIN,
-                    content=paper.abstract,
-                    is_abstract_only=True,
-                )
-                abstract_used += 1
-        if abstract_used:
-            logger.info(
-                "Abstract fallback applied to %d papers with no full text.",
-                abstract_used,
-            )
-
-        return all_papers
-
-
-async def _fetch_full_text_safe(client: object, paper: Paper) -> str | None:
-    try:
-        return await client.fetch_full_text(paper)  # type: ignore[attr-defined]
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Full-text fetch error for '%s': %s", paper.title[:60], exc)
-        return None
-
-
-def _is_binary(text: str) -> bool:
-    """Return True if the string looks like raw binary (e.g. a PDF byte stream)."""
-    if text.startswith("%PDF"):
-        return True
-    # More than 5% non-printable bytes → treat as binary
-    non_printable = sum(1 for c in text[:2000] if ord(c) < 9 or (13 < ord(c) < 32))
-    return non_printable > len(text[:2000]) * 0.05
+        return papers
 
 
 # ── Stand-alone entry point ───────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import asyncio
+    import logging  # noqa: F811
 
     logging.basicConfig(
         level=logging.INFO,
@@ -143,19 +69,21 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    from utils.intermediate_io import (  # noqa: E402
+    from utils.intermediate_io import (
         STEP1_FILE,
-        STEP2_FILE,
+        STEP5_FILE,
         load_model,
         save_json,
     )
+    from models.query import ExpandedQuery
 
     async def _main() -> None:
         expanded = load_model(STEP1_FILE, ExpandedQuery)
         orchestrator = MultiSourceOrchestrator()
         papers = await orchestrator.fetch_papers(expanded)
-        save_json(papers, STEP2_FILE)
-        print(f"Fetched {len(papers)} papers.")
-        print(f"Saved → intermediate_outputs/{STEP2_FILE}")
+        save_json(papers, STEP5_FILE)
+        print(f"Pipeline produced {len(papers)} papers with clean text.")
+        print(f"Saved → intermediate_outputs/{STEP5_FILE}")
 
     asyncio.run(_main())
+

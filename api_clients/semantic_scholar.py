@@ -7,8 +7,10 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
+import base64
+
 from config import get_settings
-from models.paper import Paper
+from models.paper import FullText, FullTextFormat, Paper
 from .base import BaseAPIClient
 
 logger = logging.getLogger(__name__)
@@ -60,14 +62,40 @@ class SemanticScholarClient(BaseAPIClient):
             )
         return papers
 
-    async def fetch_full_text(self, paper: Paper) -> Optional[str]:
-        """For Semantic Scholar we rely on the open-access PDF URL stored in paper.url."""
-        if not paper.url:
+    async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
+        """Look up the paper's open-access PDF URL via DOI, then download it.
+
+        For papers from any source, performs a DOI-based lookup against
+        Semantic Scholar to discover an ``openAccessPdf`` URL.  Falls back
+        to the stored ``paper.url`` only for papers sourced from S2.
+        """
+        pdf_url: Optional[str] = None
+
+        if paper.doi:
+            try:
+                resp = await self._get(
+                    _PAPER_URL.format(paper_id=f"DOI:{paper.doi}"),
+                    params={"fields": "openAccessPdf"},
+                    headers=self._headers(),
+                )
+                data = resp.json()
+                pdf_url = (data.get("openAccessPdf") or {}).get("url")
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("SemanticScholar DOI lookup failed for %s: %s", paper.doi, exc)
+
+        # Only fall back to the stored URL when it came from Semantic Scholar
+        if not pdf_url and paper.source == "semantic_scholar":
+            pdf_url = paper.url
+
+        if not pdf_url:
             return None
+
         try:
-            resp = await self._get(paper.url)
-            # Return raw bytes as text (caller will handle PDF extraction if needed)
-            return resp.text
+            pdf_bytes = await self._get_bytes(pdf_url)
+            if not pdf_bytes:
+                return None
+            b64 = base64.b64encode(pdf_bytes).decode("ascii")
+            return FullText(format=FullTextFormat.PDF, content=b64)
         except Exception as exc:  # noqa: BLE001
             logger.warning("SemanticScholar full-text fetch failed: %s", exc)
             return None

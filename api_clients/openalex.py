@@ -8,7 +8,9 @@ import logging
 from typing import List, Optional
 from urllib.parse import quote
 
-from models.paper import Paper
+import base64
+
+from models.paper import FullText, FullTextFormat, Paper
 from .base import BaseAPIClient
 
 logger = logging.getLogger(__name__)
@@ -66,17 +68,47 @@ class OpenAlexClient(BaseAPIClient):
             )
         return papers
 
-    async def fetch_full_text(self, paper: Paper) -> Optional[str]:
-        """Attempt to fetch open-access PDF text via the OA URL."""
-        if not paper.url:
+    async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
+        """Find the OA URL via DOI lookup, then download the content.
+
+        For papers from any source, performs a DOI-based lookup against
+        OpenAlex to discover an open-access URL.  Falls back to the stored
+        ``paper.url`` only for papers already sourced from OpenAlex.
+        """
+        oa_url: Optional[str] = None
+
+        if paper.doi:
+            try:
+                resp = await self._get(
+                    _SINGLE_WORK_URL.format(doi=paper.doi),
+                    params={"select": "open_access,primary_location"},
+                    headers=self._headers(),
+                )
+                data = resp.json()
+                oa_url = (
+                    (data.get("open_access") or {}).get("oa_url")
+                    or (data.get("primary_location") or {}).get("landing_page_url")
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("OpenAlex DOI lookup failed for %s: %s", paper.doi, exc)
+
+        # Only fall back to the stored URL when it actually came from OpenAlex
+        if not oa_url and paper.source == "openalex":
+            oa_url = paper.url
+
+        if not oa_url:
             return None
+
         try:
-            resp = await self._get(paper.url)
-            ct = resp.headers.get("content-type", "")
-            if "pdf" in ct.lower():
-                # Return raw bytes string; caller should use a PDF extractor
-                return resp.text
-            return resp.text
+            pdf_bytes = await self._get_bytes(oa_url)
+            if pdf_bytes[:4] == b"%PDF":
+                b64 = base64.b64encode(pdf_bytes).decode("ascii")
+                return FullText(format=FullTextFormat.PDF, content=b64)
+            text = pdf_bytes.decode("utf-8", errors="replace").strip()
+            if not text:
+                return None
+            fmt = FullTextFormat.HTML if text.lstrip().startswith("<") and "html" in text[:200].lower() else FullTextFormat.PLAIN
+            return FullText(format=fmt, content=text)
         except Exception as exc:  # noqa: BLE001
             logger.warning("OpenAlex full-text fetch failed for %s: %s", paper.doi, exc)
             return None

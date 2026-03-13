@@ -14,9 +14,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from api_clients.crossref import CrossRefClient
 from api_clients.europe_pmc import EuropePMCClient
-from api_clients.openalex import OpenAlexClient
+from api_clients.semantic_scholar import SemanticScholarClient
 from config import get_settings
 from models.paper import FullText, FullTextFormat, Paper
 from models.protocol import ExtractedProtocol, ProtocolStep
@@ -226,32 +225,33 @@ class ProtocolExtractor:
             protocol.unresolved_citations.remove(citation_key)
 
     async def _fetch_cited_paper(self, doi: str) -> Optional[Paper]:
-        """Resolve a DOI to a Paper with full text via CrossRef + Europe PMC."""
-        paper: Optional[Paper] = None
-        async with CrossRefClient() as cr:
-            paper = await cr.resolve_doi(doi)
+        """Resolve a DOI to a Paper with full text via Europe PMC or Semantic Scholar."""
+        # Try to fetch full text by DOI using Europe PMC first
+        paper = Paper(
+            doi=doi,
+            title="Cited paper",
+            authors=[],
+            abstract=None,
+            year=None,
+            source="citation_investigation",
+        )
 
-        if paper is None:
-            return None
-
-        # Attempt full-text via Europe PMC
+        # Primary: Europe PMC (has XML full-text for PMC articles)
         async with EuropePMCClient() as epmc:
             text = await epmc.fetch_full_text(paper)
+            if text:
+                paper.full_text = text
+                return paper
 
-        if not text:
-            async with OpenAlexClient() as oa:
-                oa_papers = await oa.search(f"doi:{doi}", max_results=1)
-                if oa_papers:
-                    paper.url = oa_papers[0].url
-                    async with OpenAlexClient() as oa2:
-                        text = await oa2.fetch_full_text(paper)
+        # Fallback: Semantic Scholar (PDF access via DOI)
+        async with SemanticScholarClient() as s2:
+            text = await s2.fetch_full_text(paper)
+            if text:
+                paper.full_text = text
+                return paper
 
-        if text:
-            paper.full_text = FullText(
-                format=FullTextFormat.XML if text.lstrip().startswith("<") else FullTextFormat.PLAIN,
-                content=text,
-            )
-        return paper
+        logger.debug("Could not fetch full text for cited DOI: %s", doi)
+        return None
 
     @staticmethod
     def _merge_cited_steps(
@@ -333,14 +333,14 @@ if __name__ == "__main__":
     )
 
     from utils.intermediate_io import (  # noqa: E402
-        STEP3_FILE,
-        STEP4_FILE,
+        STEP5_FILE,
+        STEP6_FILE,
         load_model_list,
         save_json,
     )
 
     async def _main() -> None:
-        papers = load_model_list(STEP3_FILE, Paper)
+        papers = load_model_list(STEP5_FILE, Paper)
         extractor = ProtocolExtractor()
         protocols: list[ExtractedProtocol] = []
         for paper in papers:
@@ -348,8 +348,8 @@ if __name__ == "__main__":
             proto = await extractor.extract(paper)
             if proto:
                 protocols.append(proto)
-        save_json(protocols, STEP4_FILE)
+        save_json(protocols, STEP6_FILE)
         print(f"Extracted {len(protocols)} protocols.")
-        print(f"Saved → intermediate_outputs/{STEP4_FILE}")
+        print(f"Saved → intermediate_outputs/{STEP6_FILE}")
 
     asyncio.run(_main())

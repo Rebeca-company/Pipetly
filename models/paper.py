@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, HttpUrl
 class FullTextFormat(str, Enum):
     PDF = "pdf"
     XML = "xml"
+    HTML = "html"
     PLAIN = "plain"
 
 
@@ -30,9 +31,30 @@ class Paper(BaseModel):
     year: Optional[int] = None
     source: str = Field(..., description="API that returned this record (e.g. 'europe_pmc').")
     url: Optional[str] = None
+    query_type: Optional[str] = Field(
+        default=None,
+        description="Query expansion strategy that produced this record "
+                    "(structured_boolean | concept_strings).",
+    )
+    response_time_ms: Optional[float] = Field(
+        default=None,
+        description="Round-trip time of the search() call that returned this record (ms).",
+    )
+    is_error: bool = Field(
+        default=False,
+        description="True when the search call raised an exception; record is a placeholder.",
+    )
 
-    # Populated during the fetch step
+    # Populated during the full-text retrieval step
     full_text: Optional[FullText] = None
+    ft_response_time_ms: Optional[float] = Field(
+        default=None,
+        description="Response time of the winning fetch_full_text() call (ms).",
+    )
+    ft_retrieved_by: Optional[str] = Field(
+        default=None,
+        description="Short name of the API client that returned full text (e.g. 'europe_pmc').",
+    )
 
     # For deduplication
     def unique_id(self) -> str:
