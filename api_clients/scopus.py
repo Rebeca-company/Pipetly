@@ -14,7 +14,7 @@ from typing import List, Optional
 
 from config import get_settings
 from models.paper import FullText, Paper
-from .base import BaseAPIClient
+from .base import BaseAPIClient, clean_title
 
 logger = logging.getLogger(__name__)
 _settings = get_settings()
@@ -42,7 +42,7 @@ class ScopusClient(BaseAPIClient):
         params = {
             "query": query,
             "count": min(max_results, 25),
-            "field": "prism:doi,dc:title,dc:creator,author,prism:coverDate,dc:description,prism:url",
+            "view": "COMPLETE",
         }
         try:
             resp = await self._get(_SEARCH_URL, params=params, headers=self._headers())
@@ -59,7 +59,7 @@ class ScopusClient(BaseAPIClient):
                 or item.get("dc:identifier", "").replace("DOI:", "").strip()
                 or None
             )
-            title = item.get("dc:title", "Untitled")
+            title = clean_title(item.get("dc:title", ""))
             raw_authors = item.get("author", [])
             if raw_authors:
                 authors = [
@@ -78,7 +78,7 @@ class ScopusClient(BaseAPIClient):
                     doi=doi if doi else None,
                     title=title,
                     authors=authors,
-                    abstract=item.get("dc:description"),
+                    abstract=_extract_abstract(item.get("dc:description")),
                     year=_year_from_date(item.get("prism:coverDate")),
                     source="scopus",
                     url=f"https://doi.org/{doi}" if doi else item.get("prism:url"),
@@ -98,3 +98,15 @@ def _year_from_date(date_str: Optional[str]) -> Optional[int]:
         return int(str(date_str)[:4])
     except (ValueError, TypeError):
         return None
+
+
+def _extract_abstract(value: Optional[object]) -> Optional[str]:
+    """Normalize Scopus abstract field that may be a str or list."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, list) and value:
+        joined = " ".join(str(v) for v in value)
+        return joined.strip() or None
+    return None

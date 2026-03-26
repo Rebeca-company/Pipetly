@@ -141,8 +141,8 @@ if __name__ == "__main__":
 
     from utils.intermediate_io import (  # noqa: E402
         STEP1_FILE,
-        STEP6_FILE,
         STEP7_FILE,
+        STEP8_FILE,
         load_model,
         load_model_list,
         save_json,
@@ -151,12 +151,12 @@ if __name__ == "__main__":
 
     async def _main() -> None:
         intent = load_model(STEP1_FILE, ExpandedQuery).intent
-        protocols = load_model_list(STEP6_FILE, ExtractedProtocol)
+        protocols = load_model_list(STEP7_FILE, ExtractedProtocol)
         scorer = ProtocolScorer()
         scored = await scorer.score_all(protocols, intent)
-        save_json(scored, STEP7_FILE)
+        save_json(scored, STEP8_FILE)
         for sp in scored:
             print(f"  [{sp.score:.2f}] {sp.protocol.protocol_name}")
-        print(f"\nSaved → intermediate_outputs/{STEP7_FILE}")
+        print(f"\nSaved → intermediate_outputs/{STEP8_FILE}")
 
     asyncio.run(_main())

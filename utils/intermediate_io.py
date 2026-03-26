@@ -9,9 +9,12 @@ Directory layout::
         intermediate_outputs/
             step1_expanded_query.json
             step2_raw_papers.json
-            step3_filtered_papers.json
-            step4_protocols.json
-            step5_scored_protocols.json
+            step3_doi_filtered_papers.json
+            step4_fulltext_raw_papers.json
+            step5_fulltext_clean_papers.json
+            step6_fulltext_filtered_papers.json
+            step7_protocols.json
+            step8_scored_protocols.json
 
 Usage example (saving)::
 
@@ -49,8 +52,9 @@ STEP2_FILE = "step2_raw_papers.json"            # PaperSearcher  – raw metadat
 STEP3_FILE = "step3_doi_filtered_papers.json"   # MetadataFilter – dedup + DOI
 STEP4_FILE = "step4_fulltext_raw_papers.json"   # FullTextRetriever – raw PDF/XML/HTML
 STEP5_FILE = "step5_fulltext_clean_papers.json" # TextExtractor  – clean plain text
-STEP6_FILE = "step6_protocols.json"             # ProtocolExtractor output
-STEP7_FILE = "step7_scored_protocols.json"      # ProtocolScorer output
+STEP6_FILE = "step6_fulltext_filtered_papers.json" # FullTextFilter – methods section present
+STEP7_FILE = "step7_protocols.json"             # ProtocolExtractor output
+STEP8_FILE = "step8_scored_protocols.json"      # ProtocolScorer output
 
 
 # ---------------------------------------------------------------------------

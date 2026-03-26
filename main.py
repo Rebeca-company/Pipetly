@@ -28,7 +28,7 @@ from pathlib import Path
 from config import get_settings
 from models.protocol import ExtractedProtocol
 from processors import (
-    FilterPipeline,
+    FullTextFilter,
     FullTextRetriever,
     MetadataFilter,
     PaperSearcher,
@@ -45,6 +45,7 @@ from utils.intermediate_io import (
     STEP5_FILE,
     STEP6_FILE,
     STEP7_FILE,
+    STEP8_FILE,
     save_json,
 )
 from utils.output_formatter import write_markdown_output
@@ -92,8 +93,11 @@ async def run_pipeline(user_prompt: str) -> Path:
     # ── Step 4: Full-Text Retrieval ───────────────────────────────────────────
     logger.info("=== Step 4/8 – Full-Text Retrieval ===")
     ft_papers = await FullTextRetriever().retrieve(doi_filtered)
-    fetched = sum(1 for p in ft_papers if p.full_text)
-    logger.info("Raw full-text retrieved for %d / %d papers.", fetched, len(ft_papers))
+    logger.info(
+        "Raw full-text retrieved for %d / %d papers.",
+        len(ft_papers),
+        len(doi_filtered),
+    )
     save_json(ft_papers, STEP4_FILE)
 
     # ── Step 5: Text Extraction (PDF / XML / HTML → plain text) ──────────────
@@ -105,7 +109,8 @@ async def run_pipeline(user_prompt: str) -> Path:
 
     # ── Step 6: Post-Extraction Filter (full text + methods section) ──────────
     logger.info("=== Step 6/8 – Post-Extraction Filter ===")
-    filtered = FilterPipeline().run(extracted_papers)
+    filtered = FullTextFilter().run(extracted_papers)
+    save_json(filtered, STEP6_FILE)
     logger.info("%d papers passed post-extraction filter.", len(filtered))
 
     if not filtered:
@@ -123,7 +128,7 @@ async def run_pipeline(user_prompt: str) -> Path:
             protocols.append(proto)
 
     logger.info("Extracted %d protocols.", len(protocols))
-    save_json(protocols, STEP6_FILE)
+    save_json(protocols, STEP7_FILE)
     if not protocols:
         raise RuntimeError("No protocols could be extracted from the filtered papers.")
 
@@ -134,7 +139,7 @@ async def run_pipeline(user_prompt: str) -> Path:
     logger.info("Top %d protocols scored.", len(scored))
     for sp in scored:
         logger.info("  [%.2f] %s", sp.score, sp.protocol.protocol_name)
-    save_json(scored, STEP7_FILE)
+    save_json(scored, STEP8_FILE)
 
     output_path = write_markdown_output(scored, expanded.intent, _s.output_dir)
     logger.info("Output written to: %s", output_path)

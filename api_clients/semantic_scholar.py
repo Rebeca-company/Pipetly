@@ -8,10 +8,12 @@ import logging
 from typing import List, Optional
 
 import base64
+from urllib.parse import urlparse
 
 from config import get_settings
 from models.paper import FullText, FullTextFormat, Paper
-from .base import BaseAPIClient
+from utils.rate_limiter import get_shared_limiter
+from .base import BaseAPIClient, clean_title
 
 logger = logging.getLogger(__name__)
 _settings = get_settings()
@@ -19,13 +21,26 @@ _settings = get_settings()
 _SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 _PAPER_URL = "https://api.semanticscholar.org/graph/v1/paper/{paper_id}"
 _FIELDS = "paperId,externalIds,title,abstract,year,authors,openAccessPdf"
+_PDF_BLOCKLIST = {
+    "onlinelibrary.wiley.com",
+    "wiley.com",
+    "academic.oup.com",
+    "oup.com",
+    "oxfordjournals.org",
+}
 
 
 class SemanticScholarClient(BaseAPIClient):
     """Wrapper around the Semantic Scholar Graph API."""
 
-    RATE_CALLS = 3
+    RATE_CALLS = 5
     RATE_PERIOD = 1.0
+    RATE_LIMITER_KEY = "semantic_scholar"
+    STARTUP_JITTER_MAX = 0.2
+
+    def _init_rate_limiter(self):
+        calls = 5 if _settings.semantic_scholar_api_key else 1
+        return get_shared_limiter(self.RATE_LIMITER_KEY, calls=calls, period=self.RATE_PERIOD)
 
     def _headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
@@ -52,7 +67,7 @@ class SemanticScholarClient(BaseAPIClient):
             papers.append(
                 Paper(
                     doi=doi,
-                    title=item.get("title", "Untitled"),
+                    title=clean_title(item.get("title", "")),
                     authors=[a.get("name", "") for a in item.get("authors", [])],
                     abstract=item.get("abstract"),
                     year=item.get("year"),
@@ -88,6 +103,11 @@ class SemanticScholarClient(BaseAPIClient):
             pdf_url = paper.url
 
         if not pdf_url:
+            return None
+
+        host = urlparse(pdf_url).hostname or ""
+        if any(host.endswith(blocked) for blocked in _PDF_BLOCKLIST):
+            logger.debug("SemanticScholar: skipping blocked PDF host %s", host)
             return None
 
         try:

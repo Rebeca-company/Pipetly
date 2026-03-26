@@ -334,7 +334,7 @@ if __name__ == "__main__":
 
     from utils.intermediate_io import (  # noqa: E402
         STEP5_FILE,
-        STEP6_FILE,
+        STEP7_FILE,
         load_model_list,
         save_json,
     )
@@ -348,8 +348,8 @@ if __name__ == "__main__":
             proto = await extractor.extract(paper)
             if proto:
                 protocols.append(proto)
-        save_json(protocols, STEP6_FILE)
+        save_json(protocols, STEP7_FILE)
         print(f"Extracted {len(protocols)} protocols.")
-        print(f"Saved → intermediate_outputs/{STEP6_FILE}")
+        print(f"Saved → intermediate_outputs/{STEP7_FILE}")
 
     asyncio.run(_main())

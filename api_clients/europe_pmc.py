@@ -9,7 +9,7 @@ import re
 from typing import List, Optional
 
 from models.paper import FullText, FullTextFormat, Paper
-from .base import BaseAPIClient
+from .base import BaseAPIClient, clean_title
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class EuropePMCClient(BaseAPIClient):
         papers: list[Paper] = []
         for item in data.get("resultList", {}).get("result", []):
             doi = item.get("doi") or None
-            title = item.get("title", "").strip() or "Untitled"
+            title = clean_title(item.get("title", ""))
             # Use the pmcid field directly; fall back to id only when source==PMC
             pmcid = item.get("pmcid") or (
                 item.get("id") if item.get("source") == "PMC" else None

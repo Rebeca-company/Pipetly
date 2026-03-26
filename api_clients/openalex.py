@@ -11,7 +11,7 @@ from urllib.parse import quote
 import base64
 
 from models.paper import FullText, FullTextFormat, Paper
-from .base import BaseAPIClient
+from .base import BaseAPIClient, clean_title
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class OpenAlexClient(BaseAPIClient):
         papers: list[Paper] = []
         for item in data.get("results", []):
             doi = (item.get("doi") or "").replace("https://doi.org/", "") or None
-            title = item.get("title", "Untitled")
+            title = clean_title(item.get("title", ""))
             authors = [
                 a.get("author", {}).get("display_name", "")
                 for a in item.get("authorships", [])
@@ -100,14 +100,21 @@ class OpenAlexClient(BaseAPIClient):
             return None
 
         try:
-            pdf_bytes = await self._get_bytes(oa_url)
-            if pdf_bytes[:4] == b"%PDF":
-                b64 = base64.b64encode(pdf_bytes).decode("ascii")
+            raw_bytes = await self._get_bytes(oa_url)
+
+            # Robust PDF detection: look for %PDF after optional whitespace/BOM in first KB
+            probe = raw_bytes[:1024].lstrip(b"\r\n\t \ufeff")
+            if b"%PDF" in probe[:20]:
+                b64 = base64.b64encode(raw_bytes).decode("ascii")
                 return FullText(format=FullTextFormat.PDF, content=b64)
-            text = pdf_bytes.decode("utf-8", errors="replace").strip()
+
+            text = raw_bytes.decode("utf-8", errors="replace").strip()
             if not text:
                 return None
-            fmt = FullTextFormat.HTML if text.lstrip().startswith("<") and "html" in text[:200].lower() else FullTextFormat.PLAIN
+
+            head = text[:200].lower().lstrip()
+            is_html = head.startswith("<") and ("<html" in head or "<!doctype" in head)
+            fmt = FullTextFormat.HTML if is_html else FullTextFormat.PLAIN
             return FullText(format=fmt, content=text)
         except Exception as exc:  # noqa: BLE001
             logger.warning("OpenAlex full-text fetch failed for %s: %s", paper.doi, exc)

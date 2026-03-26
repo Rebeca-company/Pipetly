@@ -11,7 +11,7 @@ from typing import List, Optional
 
 from config import get_settings
 from models.paper import FullText, FullTextFormat, Paper
-from .base import BaseAPIClient
+from .base import BaseAPIClient, clean_title
 
 logger = logging.getLogger(__name__)
 _settings = get_settings()
@@ -74,7 +74,7 @@ class ElsevierClient(BaseAPIClient):
             papers.append(
                 Paper(
                     doi=doi or None,
-                    title=item.get("dc:title", "Untitled"),
+                    title=clean_title(item.get("dc:title", "")),
                     authors=authors,
                     abstract=item.get("dc:description"),
                     year=_year_from_date(item.get("prism:coverDate")),
@@ -86,6 +86,9 @@ class ElsevierClient(BaseAPIClient):
 
     async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
         if not _settings.elsevier_api_key or not paper.doi:
+            return None
+        if not _is_elsevier_doi(paper.doi):
+            logger.debug("Skipping Elsevier full-text fetch for non-Elsevier DOI: %s", paper.doi)
             return None
         url = _ARTICLE_URL.format(doi=paper.doi)
         try:
@@ -106,3 +109,20 @@ def _year_from_date(date_str: Optional[str]) -> Optional[int]:
         return int(str(date_str)[:4])
     except (ValueError, TypeError):
         return None
+
+
+def _is_elsevier_doi(doi: str) -> bool:
+    """Return True when the DOI belongs to Elsevier (10.1016/*)."""
+    normalized = doi.strip().lower()
+    prefixes = (
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+        "doi:",
+    )
+    for pfx in prefixes:
+        if normalized.startswith(pfx):
+            normalized = normalized[len(pfx):]
+            break
+    return normalized.startswith("10.1016/")

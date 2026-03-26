@@ -27,9 +27,9 @@ User prompt
              │
              ▼
 ┌─────────────────────────────┐
-│  3. Strict Filter Pipeline  │  Drops: duplicates, papers without DOI,
-│     (processors/            │  papers without full text, and papers with
-│      filter_pipeline.py)    │  no Methods/Experimental section (Regex)
+│  3. Full-Text Filter        │  Drops: papers without full text or without a
+│     (processors/            │  Methods/Experimental section (Regex)
+│      full_text_filter.py)   │
 └────────────┬────────────────┘
              │
              ▼
@@ -73,7 +73,7 @@ Pipetly/
 ├── processors/               ← Pipeline stages
 │   ├── query_expander.py     → Stage 1
 │   ├── orchestrator.py       → Stage 2
-│   ├── filter_pipeline.py    → Stage 3
+│   ├── full_text_filter.py   → Stage 3
 │   ├── protocol_extractor.py → Stage 4
 │   └── scorer.py             → Stage 5
 │

@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from config import get_settings
 from models.paper import FullText, FullTextFormat, Paper
-from .base import BaseAPIClient
+from .base import BaseAPIClient, clean_title
 
 logger = logging.getLogger(__name__)
 _settings = get_settings()
@@ -58,7 +58,7 @@ class COREClient(BaseAPIClient):
             papers.append(
                 Paper(
                     doi=doi or None,
-                    title=item.get("title", "Untitled"),
+                    title=clean_title(item.get("title", "")),
                     authors=[a.get("name", "") for a in (item.get("authors") or [])],
                     abstract=item.get("abstract"),
                     year=_safe_int(item.get("yearPublished")),

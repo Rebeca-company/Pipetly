@@ -1,7 +1,11 @@
 """Abstract base class shared by all API clients."""
 from __future__ import annotations
 
+import asyncio
+import html
 import logging
+import random
+import re
 import time as _time
 from abc import ABC, abstractmethod
 from typing import List, Optional
@@ -10,10 +14,28 @@ import httpx
 
 from config import get_settings
 from models.paper import FullText, Paper
-from utils.rate_limiter import RateLimiter
+from utils.rate_limiter import RateLimiter, get_shared_limiter
 
 logger = logging.getLogger(__name__)
 _settings = get_settings()
+
+
+def clean_title(raw: Optional[str]) -> str:
+    """Return a plain-text, whitespace-normalised title.
+
+    * Strips HTML tags (e.g. <i>...</i>) that some APIs include.
+    * Unescapes HTML entities.
+    * Collapses repeated whitespace and line breaks.
+    * Falls back to "Untitled" when the result is empty.
+    """
+
+    if not raw:
+        return "Untitled"
+
+    text = html.unescape(raw)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or "Untitled"
 
 
 class BaseAPIClient(ABC):
@@ -26,12 +48,15 @@ class BaseAPIClient(ABC):
     #: Sub-class should override these to customise throttling.
     RATE_CALLS: int = 5
     RATE_PERIOD: float = 1.0
+    RATE_LIMITER_KEY: Optional[str] = None
+    STARTUP_JITTER_MAX: float = 0.0
 
     def __init__(self) -> None:
-        self._limiter = RateLimiter(calls=self.RATE_CALLS, period=self.RATE_PERIOD)
+        self._limiter = self._init_rate_limiter()
         self._client: Optional[httpx.AsyncClient] = None
         # Diagnostic log: each entry has url, response_time_ms, is_error
         self._request_stats: list[dict] = []
+        self._first_request = True
 
     # ── Context manager ───────────────────────────────────────────────────────
 
@@ -48,39 +73,70 @@ class BaseAPIClient(ABC):
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
+    def _init_rate_limiter(self) -> RateLimiter:
+        if self.RATE_LIMITER_KEY:
+            return get_shared_limiter(
+                name=self.RATE_LIMITER_KEY,
+                calls=self.RATE_CALLS,
+                period=self.RATE_PERIOD,
+            )
+        return RateLimiter(calls=self.RATE_CALLS, period=self.RATE_PERIOD)
+
+    def _compute_backoff(self, attempt: int) -> float:
+        """Return exponential backoff with jitter for the *attempt* (1-indexed)."""
+        base_delay = _settings.http_retry_backoff ** max(attempt - 1, 0)
+        jitter = random.uniform(0, base_delay * 0.3)
+        return base_delay + jitter
+
     async def _get(self, url: str, **kwargs: object) -> httpx.Response:
         """Rate-limited GET with exponential-backoff retry and timing instrumentation."""
         assert self._client is not None, "Use client as async context manager."
+        if self._first_request:
+            self._first_request = False
+            if self.STARTUP_JITTER_MAX > 0:
+                await asyncio.sleep(random.uniform(0, self.STARTUP_JITTER_MAX))
         await self._limiter.acquire()
         t0 = _time.monotonic()
-        last_exc: Exception = RuntimeError("unreachable")
-        for attempt in range(_settings.http_max_retries):
+        last_exc: Optional[Exception] = None
+        for attempt in range(1, _settings.http_max_retries + 1):
             try:
                 resp = await self._client.get(url, **kwargs)  # type: ignore[arg-type]
                 resp.raise_for_status()
                 elapsed_ms = (_time.monotonic() - t0) * 1000
-                self._request_stats.append({"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": False})
+                self._request_stats.append(
+                    {"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": False}
+                )
                 return resp
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code == 429:
-                    import asyncio
-                    wait = _settings.http_retry_backoff ** attempt
-                    logger.warning("Rate-limited by %s – retrying in %.1fs", url, wait)
-                    await asyncio.sleep(wait)
-                    last_exc = exc
-                else:
-                    elapsed_ms = (_time.monotonic() - t0) * 1000
-                    self._request_stats.append({"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True})
-                    raise
-            except httpx.RequestError as exc:
-                import asyncio
-                wait = _settings.http_retry_backoff ** attempt
-                logger.warning("Request error for %s: %s – retrying in %.1fs", url, exc, wait)
-                await asyncio.sleep(wait)
                 last_exc = exc
+                retryable = exc.response.status_code in {429, 500, 502, 503, 504}
+                if retryable and attempt < _settings.http_max_retries:
+                    wait = self._compute_backoff(attempt)
+                    logger.warning(
+                        "Retryable HTTP %s from %s – retrying in %.2fs", exc.response.status_code, url, wait
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                elapsed_ms = (_time.monotonic() - t0) * 1000
+                self._request_stats.append(
+                    {"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True}
+                )
+                raise
+            except httpx.RequestError as exc:
+                last_exc = exc
+                if attempt < _settings.http_max_retries:
+                    wait = self._compute_backoff(attempt)
+                    logger.warning("Request error for %s: %s – retrying in %.2fs", url, exc, wait)
+                    await asyncio.sleep(wait)
+                    continue
+                elapsed_ms = (_time.monotonic() - t0) * 1000
+                self._request_stats.append(
+                    {"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True}
+                )
+                raise
         elapsed_ms = (_time.monotonic() - t0) * 1000
         self._request_stats.append({"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True})
-        raise last_exc
+        raise last_exc or RuntimeError("HTTP retries exhausted")
 
     # ── Abstract interface ────────────────────────────────────────────────────
 

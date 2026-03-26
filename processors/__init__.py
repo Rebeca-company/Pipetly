@@ -4,7 +4,7 @@ from .metadata_filter import MetadataFilter
 from .full_text_retriever import FullTextRetriever
 from .text_extractor import TextExtractor
 from .orchestrator import MultiSourceOrchestrator
-from .filter_pipeline import FilterPipeline
+from .full_text_filter import FullTextFilter
 from .protocol_extractor import ProtocolExtractor
 from .scorer import ProtocolScorer
 
@@ -15,7 +15,7 @@ __all__ = [
     "FullTextRetriever",
     "TextExtractor",
     "MultiSourceOrchestrator",
-    "FilterPipeline",
+    "FullTextFilter",
     "ProtocolExtractor",
     "ProtocolScorer",
 ]

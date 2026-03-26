@@ -5,10 +5,11 @@ Docs: https://api.crossref.org/swagger-ui/index.html
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional
 
 from models.paper import FullText, Paper
-from .base import BaseAPIClient
+from .base import BaseAPIClient, clean_title
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,12 @@ class CrossRefClient(BaseAPIClient):
     def _headers(self) -> dict[str, str]:
         # Polite pool: add a contact email via User-Agent
         return {"User-Agent": "Pipetly/1.0 (mailto:contact@pipetly.bot)"}
+
+    @staticmethod
+    def _is_component_title(title: str) -> bool:
+        """Return True for titles that look like components (figures, supplements)."""
+        pattern = re.compile(r"\b(figure|table|supplement|peer review report|video)\b", re.IGNORECASE)
+        return bool(pattern.search(title))
 
     async def search(self, query: str, max_results: int = 10) -> List[Paper]:
         params = {
@@ -43,7 +50,9 @@ class CrossRefClient(BaseAPIClient):
         for item in data.get("message", {}).get("items", []):
             doi = item.get("DOI")
             titles = item.get("title", [])
-            title = titles[0] if titles else "Untitled"
+            title = clean_title(titles[0] if titles else "")
+            if self._is_component_title(title):
+                continue
             authors = [
                 f"{a.get('given', '')} {a.get('family', '')}".strip()
                 for a in item.get("author", [])
@@ -78,7 +87,9 @@ class CrossRefClient(BaseAPIClient):
             return None
 
         titles = item.get("title", [])
-        title = titles[0] if titles else "Untitled"
+        title = clean_title(titles[0] if titles else "")
+        if self._is_component_title(title):
+            return None
         authors = [
             f"{a.get('given', '')} {a.get('family', '')}".strip()
             for a in item.get("author", [])

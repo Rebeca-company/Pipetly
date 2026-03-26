@@ -5,6 +5,8 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 
+_shared_limiters: dict[str, "RateLimiter"] = {}
+
 
 @dataclass
 class RateLimiter:
@@ -38,3 +40,21 @@ class RateLimiter:
                 now = time.monotonic()
                 self._timestamps = [t for t in self._timestamps if now - t < self.period]
             self._timestamps.append(time.monotonic())
+
+
+def get_shared_limiter(name: str, calls: int, period: float) -> RateLimiter:
+    """Return a shared ``RateLimiter`` instance for *name*.
+
+    Ensures callers reuse the same limiter per logical upstream (e.g., NCBI)
+    so distributed client instances respect a global quota.
+    """
+    limiter = _shared_limiters.get(name)
+    if limiter is None:
+        limiter = RateLimiter(calls=calls, period=period)
+        _shared_limiters[name] = limiter
+        return limiter
+
+    # Update limits if the shared limiter already exists with different caps.
+    limiter.calls = calls
+    limiter.period = period
+    return limiter

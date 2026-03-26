@@ -16,6 +16,7 @@ Supported input formats
 from __future__ import annotations
 
 import base64
+import html
 import io
 import logging
 import re
@@ -27,13 +28,31 @@ from models.paper import FullText, FullTextFormat, Paper
 
 logger = logging.getLogger(__name__)
 
-# Try to import pdfminer; degrade gracefully when absent.
+# Prefer PyMuPDF (fitz) for speed; fall back to pdfminer when absent.
+try:
+    import fitz  # type: ignore
+
+    _PYMUPDF_AVAILABLE = True
+except ImportError:
+    _PYMUPDF_AVAILABLE = False
+    logger.debug("PyMuPDF not installed – fast PDF extraction disabled.")
+
 try:
     from pdfminer.high_level import extract_text as _pdf_extract_text  # type: ignore
+
     _PDFMINER_AVAILABLE = True
 except ImportError:
     _PDFMINER_AVAILABLE = False
     logger.debug("pdfminer.six not installed – PDF text extraction disabled.")
+
+try:
+    from lxml import html as lxml_html  # type: ignore
+    from lxml import etree as lxml_etree  # type: ignore
+
+    _LXML_AVAILABLE = True
+except ImportError:
+    _LXML_AVAILABLE = False
+    logger.debug("lxml not installed – robust HTML recovery disabled.")
 
 # Collapse runs of whitespace / newlines
 _WHITESPACE_RE = re.compile(r"\s{2,}")
@@ -67,7 +86,8 @@ class TextExtractor:
             clean = self._to_plain(paper.full_text)
             if clean:
                 paper.full_text = FullText(
-                    format=FullTextFormat.PLAIN,
+                    # Preserve original format for provenance, but update content and abstract-only flag
+                    format=paper.full_text.format,
                     content=clean,
                     is_abstract_only=paper.full_text.is_abstract_only,
                 )
@@ -103,16 +123,35 @@ class TextExtractor:
     # ── PDF ───────────────────────────────────────────────────────────────────
 
     def _from_pdf(self, b64_content: str) -> Optional[str]:
-        """Decode base-64 PDF bytes and extract text with pdfminer."""
-        if not _PDFMINER_AVAILABLE:
-            logger.debug("Skipping PDF extraction: pdfminer.six not installed.")
+        """Decode base-64 PDF bytes and extract text (PyMuPDF → pdfminer fallback)."""
+        if _PYMUPDF_AVAILABLE:
+            text = self._from_pdf_pymupdf(b64_content)
+            if text:
+                return text
+        if _PDFMINER_AVAILABLE:
+            return self._from_pdf_pdfminer(b64_content)
+        logger.debug("Skipping PDF extraction: no PDF backend available.")
+        return None
+
+    def _from_pdf_pymupdf(self, b64_content: str) -> Optional[str]:
+        """Fast PDF text extraction using PyMuPDF."""
+        try:
+            pdf_bytes = base64.b64decode(b64_content)
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                parts = [page.get_text("text") for page in doc]
+            return _normalise(" ".join(parts)) or None
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("PDF text extraction via PyMuPDF failed: %s", exc)
             return None
+
+    def _from_pdf_pdfminer(self, b64_content: str) -> Optional[str]:
+        """PDF text extraction using pdfminer.six (slower fallback)."""
         try:
             pdf_bytes = base64.b64decode(b64_content)
             text = _pdf_extract_text(io.BytesIO(pdf_bytes))
             return _normalise(text) or None
         except Exception as exc:  # noqa: BLE001
-            logger.warning("PDF text extraction failed: %s", exc)
+            logger.warning("PDF text extraction via pdfminer failed: %s", exc)
             return None
 
     # ── XML ───────────────────────────────────────────────────────────────────
@@ -131,10 +170,33 @@ class TextExtractor:
     # ── HTML ──────────────────────────────────────────────────────────────────
 
     def _from_html(self, content: str) -> Optional[str]:
-        """Strip HTML tags and decode HTML entities to plain text."""
-        extractor = _HTMLTextExtractor()
-        extractor.feed(content)
-        return _normalise(extractor.get_text()) or None
+        """Strip HTML tags and decode entities; tolerate malformed HTML."""
+        # 1) Prefer lxml with recover mode for broken HTML payloads.
+        if _LXML_AVAILABLE:
+            try:
+                parser = lxml_html.HTMLParser(encoding="utf-8", recover=True)
+                root = lxml_html.fromstring(content, parser=parser)
+                text = root.text_content()
+                clean = _normalise(text)
+                if clean:
+                    return clean
+            except (lxml_etree.ParserError, ValueError) as exc:
+                logger.debug("lxml HTML recovery failed: %s", exc)
+
+        # 2) Fallback to stdlib HTMLParser.
+        try:
+            extractor = _HTMLTextExtractor()
+            extractor.feed(content)
+            extractor.close()
+            clean = _normalise(extractor.get_text())
+            if clean:
+                return clean
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("stdlib HTML parsing failed: %s", exc)
+
+        # 3) Last-resort regex cleanup for severely malformed payloads.
+        text = re.sub(r"<[^>]+>", " ", content)
+        return _normalise(html.unescape(text)) or None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -176,7 +238,7 @@ if __name__ == "__main__":
     import logging  # noqa: F811
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
         datefmt="%H:%M:%S",
     )

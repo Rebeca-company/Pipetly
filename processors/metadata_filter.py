@@ -7,6 +7,7 @@ deduplicated set of uniquely identifiable records.
 from __future__ import annotations
 
 import logging
+import unicodedata
 import re
 from typing import Dict, List
 
@@ -17,10 +18,19 @@ logger = logging.getLogger(__name__)
 # Normalise a title for duplicate comparison: lowercase, collapse whitespace,
 # strip leading/trailing punctuation.
 _WS_RE = re.compile(r"\s+")
-
+_PUNCT_RE = re.compile(r"[^\w\s]")  # elimina puntuación
 
 def _normalise_title(title: str) -> str:
-    return _WS_RE.sub(" ", title.strip().lower())
+    # 1. Quitar acentos: "Détection" → "Detection"
+    title = unicodedata.normalize("NFKD", title)
+    title = title.encode("ascii", "ignore").decode("ascii")
+    # 2. Lowercase
+    title = title.lower()
+    # 3. Eliminar puntuación: "deep-learning" → "deep learning"
+    title = _PUNCT_RE.sub("", title)
+    # 4. Colapsar espacios
+    title = _WS_RE.sub("", title).strip()
+    return title
 
 
 def _completeness(paper: Paper) -> int:
@@ -112,7 +122,7 @@ if __name__ == "__main__":
     import logging  # noqa: F811
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
         datefmt="%H:%M:%S",
     )

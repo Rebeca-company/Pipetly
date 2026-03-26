@@ -6,20 +6,28 @@ Docs:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
+import time as _time
 from typing import List, Optional
 
+from config import get_settings
 from models.paper import FullText, FullTextFormat, Paper
-from .base import BaseAPIClient
+from utils.rate_limiter import get_shared_limiter
+from .base import BaseAPIClient, clean_title
 
 logger = logging.getLogger(__name__)
+_settings = get_settings()
 
 _ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 _ESUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
 _EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+_BIOC_URL = "https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi"
 
 _TOOL = "Pipetly"
 _EMAIL = "contact@pipetly.bot"
+_PMCID_RE = re.compile(r"PMC\d+", re.IGNORECASE)
 
 
 class PMCClient(BaseAPIClient):
@@ -27,9 +35,35 @@ class PMCClient(BaseAPIClient):
 
     RATE_CALLS = 3
     RATE_PERIOD = 1.0
+    RATE_LIMITER_KEY = "ncbi_eutils"
+    _NCBI_SEMAPHORE = asyncio.Semaphore(5)
+    _NCBI_MIN_DELAY = 0.1  # seconds between requests to avoid upstream throttling
+    _NCBI_DELAY_LOCK = asyncio.Lock()
+    _last_ncbi_request_ts: float = 0.0
+
+    def _init_rate_limiter(self):
+        calls = 10 if _settings.ncbi_api_key else 3
+        return get_shared_limiter(self.RATE_LIMITER_KEY, calls=calls, period=self.RATE_PERIOD)
+
+    async def _get(self, url: str, **kwargs: object):  # type: ignore[override]
+        # NCBI throttles bursts; gate concurrency and add minimal spacing between calls.
+        async with self._NCBI_SEMAPHORE:
+            await self._ncbi_min_spacing()
+            return await super()._get(url, **kwargs)
+
+    async def _ncbi_min_spacing(self) -> None:
+        async with self._NCBI_DELAY_LOCK:
+            now = _time.monotonic()
+            wait_for = self._NCBI_MIN_DELAY - (now - self._last_ncbi_request_ts)
+            if wait_for > 0:
+                await asyncio.sleep(wait_for)
+            self._last_ncbi_request_ts = _time.monotonic()
 
     def _base_params(self) -> dict[str, str]:
-        return {"tool": _TOOL, "email": _EMAIL, "retmode": "json"}
+        params = {"tool": _TOOL, "email": _EMAIL, "retmode": "json"}
+        if _settings.ncbi_api_key:
+            params["api_key"] = _settings.ncbi_api_key
+        return params
 
     async def search(self, query: str, max_results: int = 10) -> List[Paper]:
         # Search PubMed for article IDs
@@ -76,7 +110,7 @@ class PMCClient(BaseAPIClient):
                 (a.get("value") for a in article_ids if a.get("idtype") == "pmc"),
                 None,
             )
-            title = item.get("title", "Untitled")
+            title = clean_title(item.get("title", ""))
             authors = [a.get("name", "") for a in item.get("authors", [])]
             year = _safe_int((item.get("pubdate") or "")[:4])
             papers.append(
@@ -125,9 +159,13 @@ class PMCClient(BaseAPIClient):
         if not pmc_id:
             return None
 
+        # Try BioC (fast, OA subset) before Entrez efetch
+        bioc_xml = await self._fetch_bioc_xml(pmc_id)
+        if bioc_xml:
+            return FullText(format=FullTextFormat.XML, content=bioc_xml)
+
         params = {
-            "tool": _TOOL,
-            "email": _EMAIL,
+            **self._base_params(),
             "db": "pmc",
             "id": pmc_id[3:] if pmc_id.upper().startswith("PMC") else pmc_id,
             "rettype": "full",
@@ -136,22 +174,37 @@ class PMCClient(BaseAPIClient):
         try:
             resp = await self._get(_EFETCH_URL, params=params)
             xml_text = resp.text.strip()
-            if not xml_text:
+            if not xml_text or "<html" in xml_text.lower():
                 return None
             return FullText(format=FullTextFormat.XML, content=xml_text)
         except Exception as exc:  # noqa: BLE001
             logger.warning("PMC full-text fetch failed for %s: %s", pmc_id, exc)
             return None
 
+    async def _fetch_bioc_xml(self, pmc_id: str) -> Optional[str]:
+        """Fetch BioC XML for PMC OA articles; returns None on failure."""
+        pmc_norm = pmc_id if pmc_id.upper().startswith("PMC") else f"PMC{pmc_id}"
+        params = {"id": pmc_norm, "format": "xml"}
+        try:
+            resp = await self._get(_BIOC_URL, params=params)
+            xml_text = resp.text.strip()
+            # BioC returns short error payloads; require body tag or minimal length
+            lower = xml_text.lower()
+            if not xml_text or "<error" in lower or "<body" not in lower or len(xml_text) < 500:
+                return None
+            return xml_text
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("BioC fetch failed for %s: %s", pmc_norm, exc)
+            return None
+
 
 def _extract_pmcid_from_url(url: Optional[str]) -> Optional[str]:
-    """Extract a PMCxxxxxxx identifier from a stored PubMed Central URL."""
-    if not url or "pmc/articles" not in url:
+    """Extract a PMCxxxxxxx identifier from any URL or string containing it."""
+    if not url:
         return None
-    parts = url.rstrip("/").split("/")
-    for part in reversed(parts):
-        if part.upper().startswith("PMC") and part[3:].isdigit():
-            return part
+    match = _PMCID_RE.search(url)
+    if match:
+        return match.group(0).upper()
     return None
 
 

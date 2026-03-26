@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # Unpaywall requires a contact e-mail instead of an API key
     unpaywall_email: str = Field(default="", alias="UNPAYWALL_EMAIL")
     core_api_key: str = Field(default="", alias="CORE_API_KEY")
+    ncbi_api_key: str = Field(default="", alias="NCBI_API_KEY")
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
     http_timeout: float = 30.0          # seconds per request
@@ -40,7 +41,7 @@ class Settings(BaseSettings):
     http_retry_backoff: float = 2.0     # exponential-backoff base
 
     # ── Pipeline ─────────────────────────────────────────────────────────────
-    max_papers_per_source: int = 10     # fetch limit per API
+    max_papers_per_source: int = 3     # fetch limit per API
     max_citation_depth: int = 3         # recursive citation-investigator depth
     top_k_protocols: int = 3            # how many to score/return
 
