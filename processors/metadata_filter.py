@@ -1,4 +1,4 @@
-"""Step 2 – Metadata Filtering.
+"""Step 3 – Metadata Filtering.
 
 Remove duplicate papers and entries that lack a DOI so that downstream
 steps (full-text retrieval, protocol extraction) operate on a clean,
@@ -15,10 +15,11 @@ from models.paper import Paper
 
 logger = logging.getLogger(__name__)
 
-# Normalise a title for duplicate comparison: lowercase, collapse whitespace,
-# strip leading/trailing punctuation.
+# Normalise a title for duplicate comparison: lowercase, remove accents,
+# strip punctuation, and collapse whitespace.
 _WS_RE = re.compile(r"\s+")
-_PUNCT_RE = re.compile(r"[^\w\s]")  # elimina puntuación
+_PUNCT_RE = re.compile(r"[^\w\s]")
+_DOI_PREFIX_RE = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:)", re.IGNORECASE)
 
 def _normalise_title(title: str) -> str:
     # 1. Quitar acentos: "Détection" → "Detection"
@@ -31,6 +32,12 @@ def _normalise_title(title: str) -> str:
     # 4. Colapsar espacios
     title = _WS_RE.sub("", title).strip()
     return title
+
+
+def _canonical_doi(doi: str) -> str:
+    """Return a normalized DOI key suitable for deduplication."""
+    normalized = _DOI_PREFIX_RE.sub("", doi.strip()).strip().lower()
+    return normalized.rstrip("/.")
 
 
 def _completeness(paper: Paper) -> int:
@@ -52,7 +59,7 @@ def _completeness(paper: Paper) -> int:
 
 
 class MetadataFilter:
-    """Step 2: deduplicate by DOI and title, keep the most complete record."""
+    """Step 3: deduplicate by DOI and title, keep the most complete record."""
 
     def run(self, papers: List[Paper]) -> List[Paper]:
         """
@@ -69,6 +76,7 @@ class MetadataFilter:
            sharing the same normalised title (but different DOIs) are also
            collapsed; again the most complete record is kept.
         """
+        logger.info("Step 3 start - Metadata filtering on %d papers.", len(papers))
         no_doi: int = 0
 
         # ── Pass 1: DOI deduplication ─────────────────────────────────────
@@ -78,7 +86,11 @@ class MetadataFilter:
                 no_doi += 1
                 logger.debug("No DOI – discarding '%s'", paper.title[:60])
                 continue
-            uid = paper.doi.strip().lower()
+            uid = _canonical_doi(paper.doi)
+            if not uid:
+                no_doi += 1
+                logger.debug("Invalid DOI after normalization – discarding '%s'", paper.title[:60])
+                continue
             if uid not in doi_best or _completeness(paper) > _completeness(doi_best[uid]):
                 doi_best[uid] = paper
 
@@ -89,7 +101,7 @@ class MetadataFilter:
         for paper in doi_best.values():
             norm = _normalise_title(paper.title)
             if not norm:
-                title_best[paper.doi.strip().lower()] = paper  # keep by DOI if no title
+                title_best[_canonical_doi(paper.doi or "")] = paper  # keep by DOI if no title
                 continue
             if norm not in title_best or _completeness(paper) > _completeness(title_best[norm]):
                 if norm in title_best:
@@ -104,7 +116,7 @@ class MetadataFilter:
         accepted = list(title_best.values())
 
         logger.info(
-            "Step 2 – Metadata filtering: %d raw → %d accepted "
+            "Step 3 - Metadata filtering: %d raw -> %d accepted "
             "(%d no-DOI discarded, %d DOI-duplicates removed, "
             "%d title-duplicates removed).",
             len(papers),
@@ -113,6 +125,7 @@ class MetadataFilter:
             doi_dupes,
             title_dupes,
         )
+        logger.info("Step 3 complete - Metadata filtering finished.")
         return accepted
 
 
@@ -131,7 +144,10 @@ if __name__ == "__main__":
     from models.paper import Paper  # noqa: F811
 
     _papers = load_model_list(STEP2_FILE, Paper)
+    print("[Step 3] START | Metadata Filtering")
     _filtered = MetadataFilter().run(_papers)
     save_json(_filtered, STEP3_FILE)
     print(f"{len(_filtered)} papers passed metadata filter.")
-    print(f"Saved → intermediate_outputs/{STEP3_FILE}")
+    print(
+        f"[Step 3] DONE | input={len(_papers)} output={len(_filtered)} | Output: intermediate_outputs/{STEP3_FILE}"
+    )

@@ -23,16 +23,25 @@ class Settings(BaseSettings):
     # ── LLM ──────────────────────────────────────────────────────────────────
     openrouter_api_key: str = Field(..., alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    # Gemini 1.5 Flash has been retired on OpenRouter.
-    # Default is now 2.5 Flash; override via GEMINI_MODEL= in .env.
-    gemini_model: str = "google/gemini-2.5-flash"
+    # Model used for tasks that require reading long full-text paper content.
+    gemini_model_fulltext: str = Field(
+        default="google/gemini-3-flash-preview",
+        alias="GEMINI_MODEL_FULLTEXT",
+    )
+    # Model used for the rest of LLM tasks (query expansion, formatting, etc.).
+    gemini_model_general: str = Field(
+        default="google/gemini-3-flash-preview",
+        alias="GEMINI_MODEL_GENERAL",
+    )
+    # Backward-compatible fallback for older code paths/env files.
+    gemini_model: str = "google/gemini-3-flash-preview"
 
     # ── External APIs (all optional – clients degrade gracefully) ─────────────
     elsevier_api_key: str = Field(default="", alias="ELSEVIER_API_KEY")
+    elsevier_inst_token: str = Field(default="", alias="ELSEVIER_INST_TOKEN")
     semantic_scholar_api_key: str = Field(default="", alias="SEMANTIC_SCHOLAR_API_KEY")
     # Unpaywall requires a contact e-mail instead of an API key
     unpaywall_email: str = Field(default="", alias="UNPAYWALL_EMAIL")
-    core_api_key: str = Field(default="", alias="CORE_API_KEY")
     ncbi_api_key: str = Field(default="", alias="NCBI_API_KEY")
 
     # ── HTTP ──────────────────────────────────────────────────────────────────

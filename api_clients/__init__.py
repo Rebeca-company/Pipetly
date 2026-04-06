@@ -7,7 +7,6 @@ from .openalex import OpenAlexClient
 from .scopus import ScopusClient
 from .pmc import PMCClient
 from .unpaywall import UnpaywallClient
-from .core import COREClient
 
 __all__ = [
     "BaseAPIClient",
@@ -19,5 +18,4 @@ __all__ = [
     "ScopusClient",
     "PMCClient",
     "UnpaywallClient",
-    "COREClient",
 ]

@@ -1,0 +1,7 @@
+client_label,attempts_total,success,attempted_before_success_unlogged,attempted_no_success_unlogged,not_attempted_after_success,mean_success_ms,median_success_ms,total_success_ms
+OpenAlex,69,5,0,17,47,35256.0,29531.0,176280.0
+Unpaywall,69,7,5,17,40,20122.714285714286,15984.0,140859.0
+Europe PMC,69,26,14,17,12,5131.2692307692305,5335.5,133413.0
+Semantic Scholar,69,2,12,17,38,56750.0,56750.0,113500.0
+Elsevier,69,12,40,17,0,2713.25,2648.0,32559.0
+PMC,69,0,14,17,38,,,0.0

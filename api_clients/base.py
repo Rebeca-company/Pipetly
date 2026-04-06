@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import html
 import logging
 import random
 import re
 import time as _time
 from abc import ABC, abstractmethod
+from email.utils import parsedate_to_datetime
 from typing import List, Optional
 
 import httpx
@@ -88,6 +90,30 @@ class BaseAPIClient(ABC):
         jitter = random.uniform(0, base_delay * 0.3)
         return base_delay + jitter
 
+    def _retry_after_seconds(self, response: httpx.Response) -> Optional[float]:
+        """Parse server-provided retry windows from common rate-limit headers."""
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            value = retry_after.strip()
+            try:
+                return max(0.0, float(value))
+            except ValueError:
+                try:
+                    dt = parsedate_to_datetime(value)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=_dt.timezone.utc)
+                    return max(0.0, (dt - _dt.datetime.now(_dt.timezone.utc)).total_seconds())
+                except (TypeError, ValueError):
+                    pass
+
+        reset_at = response.headers.get("X-RateLimit-Reset")
+        if reset_at:
+            try:
+                return max(0.0, float(reset_at) - _time.time())
+            except ValueError:
+                return None
+        return None
+
     async def _get(self, url: str, **kwargs: object) -> httpx.Response:
         """Rate-limited GET with exponential-backoff retry and timing instrumentation."""
         assert self._client is not None, "Use client as async context manager."
@@ -112,8 +138,16 @@ class BaseAPIClient(ABC):
                 retryable = exc.response.status_code in {429, 500, 502, 503, 504}
                 if retryable and attempt < _settings.http_max_retries:
                     wait = self._compute_backoff(attempt)
+                    if exc.response.status_code == 429:
+                        retry_after = self._retry_after_seconds(exc.response)
+                        if retry_after is not None:
+                            wait = max(wait, retry_after)
+                        await self._limiter.notify_rate_limited(wait)
                     logger.warning(
-                        "Retryable HTTP %s from %s – retrying in %.2fs", exc.response.status_code, url, wait
+                        "Retryable HTTP %s from %s - retrying in %.2fs",
+                        exc.response.status_code,
+                        url,
+                        wait,
                     )
                     await asyncio.sleep(wait)
                     continue

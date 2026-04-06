@@ -14,7 +14,7 @@ User prompt
     ▼
 ┌─────────────────────────────┐
 │  1. Query Expansion         │  Gemini rewrites the prompt into keyword queries
-│     (processors/)           │  (Boolean/MeSH) and semantic queries (NL sentences)
+│     (processors/)           │  (concept strings)
 └────────────┬────────────────┘
              │
              ▼
@@ -22,28 +22,35 @@ User prompt
 │  2. Multi-Source Fetch      │  Concurrent async calls to:
 │     (processors/            │   • Europe PMC   • Semantic Scholar
 │      orchestrator.py)       │   • Elsevier     • CrossRef
-│                             │   • OpenAlex
+│                             │   • OpenAlex     • Scopus
 └────────────┬────────────────┘
              │
              ▼
 ┌─────────────────────────────┐
-│  3. Full-Text Filter        │  Drops: papers without full text or without a
-│     (processors/            │  Methods/Experimental section (Regex)
+│  3. Metadata Filter         │  Deduplicates by DOI/title and removes no-DOI papers
+│     (processors/            │
+│      metadata_filter.py)    │
+└────────────┬────────────────┘
+             │
+             ▼
+┌─────────────────────────────┐
+│  4. Full-Text Retrieval     │  Tries multiple providers and keeps the first
+│     (processors/            │  valid full-text payload (XML/PDF/HTML/plain)
+│      full_text_retriever.py)│
+└────────────┬────────────────┘
+             │
+             ▼
+┌─────────────────────────────┐
+│  5. Text Extraction         │  Converts raw payload to clean plain text
+│     (processors/            │
+│      text_extractor.py)     │
+└────────────┬────────────────┘
+             │
+             ▼
+┌─────────────────────────────┐
+│  6. Full-Text Length Filter │  Keeps papers in configured char-range
+│     (processors/            │  (default: 10,000 to 200,000 chars)
 │      full_text_filter.py)   │
-└────────────┬────────────────┘
-             │
-             ▼
-┌─────────────────────────────┐
-│  4. Recursive Extraction    │  Gemini parses each paper → structured JSON steps
-│     "Citation Investigator" │  If a step cites another paper (e.g. "[14]"),
-│     (processors/            │  that reference is resolved, fetched, and re-parsed
-│      protocol_extractor.py) │  (up to 3 levels deep)
-└────────────┬────────────────┘
-             │
-             ▼
-┌─────────────────────────────┐
-│  5. Scoring & Output        │  Gemini scores each protocol against the original
-│     (processors/scorer.py)  │  intent → top-K results written to Markdown
 └─────────────────────────────┘
 ```
 
@@ -60,7 +67,7 @@ Pipetly/
 ├── models/                   ← Pydantic v2 data schemas
 │   ├── query.py              → ExpandedQuery
 │   ├── paper.py              → Paper, FullText
-│   └── protocol.py           → ProtocolStep, ExtractedProtocol, ScoredProtocol
+│   └── protocol.py           → ExtractedProtocol, InheritedReference, ScoredProtocol
 │
 ├── api_clients/              ← Async httpx wrappers (one file per source)
 │   ├── base.py               → Shared retry logic & token-bucket rate limiter
@@ -68,18 +75,27 @@ Pipetly/
 │   ├── semantic_scholar.py
 │   ├── elsevier.py
 │   ├── crossref.py
-│   └── openalex.py
+│   ├── openalex.py
+│   ├── scopus.py
+│   ├── pmc.py
+│   └── unpaywall.py
 │
 ├── processors/               ← Pipeline stages
 │   ├── query_expander.py     → Stage 1
-│   ├── orchestrator.py       → Stage 2
-│   ├── full_text_filter.py   → Stage 3
-│   ├── protocol_extractor.py → Stage 4
-│   └── scorer.py             → Stage 5
+│   ├── paper_searcher.py     → Stage 2
+│   ├── metadata_filter.py    → Stage 3
+│   ├── full_text_retriever.py→ Stage 4
+│   ├── text_extractor.py     → Stage 5
+│   ├── full_text_filter.py   → Stage 6
+│   ├── protocol_extractor.py → Stage 7
+│   ├── solve_references.py   → Stage 8
+│   ├── protocol_scorer.py    → Stage 9
+│   └── protocol_formatter.py → Stage 10
 │
 └── utils/
     ├── rate_limiter.py       → Async token-bucket rate limiter
-    └── output_formatter.py   → Markdown report writer
+    ├── intermediate_io.py    → Stage file IO helpers
+    └── json_utils.py         → JSON extraction helpers
 ```
 
 ---
@@ -88,7 +104,7 @@ Pipetly/
 
 - Python 3.11+
 - A [conda](https://docs.conda.io/) environment named `pipetly` (or any venv)
-- An [OpenRouter](https://openrouter.ai/) API key (used to call Gemini 1.5 Flash)
+- An [OpenRouter](https://openrouter.ai/) API key (used to call Gemini models)
 
 ---
 
@@ -127,7 +143,7 @@ Optional pipeline tunables (add to `.env` to override defaults):
 
 | Variable | Default | Description |
 |---|---|---|
-| `MAX_PAPERS_PER_SOURCE` | `10` | Results fetched per API per query |
+| `MAX_PAPERS_PER_SOURCE` | `3` | Results fetched per API per query |
 | `MAX_CITATION_DEPTH` | `3` | Max recursive citation-resolution depth |
 | `TOP_K_PROTOCOLS` | `3` | Number of protocols to score and include in the report |
 | `HTTP_TIMEOUT` | `30.0` | Per-request timeout in seconds |
@@ -163,7 +179,7 @@ The report is written to `output/protocols_<timestamp>.md`.
 ## Rank 1 — CRISPR-Cas9 Genome Editing in Human Cell Lines
 **Source:** Efficient genome editing in human cells using CRISPR-Cas9
 **DOI:** [10.1016/j.cell.2013.12.010](https://doi.org/10.1016/j.cell.2013.12.010)
-**Relevance score:** 0.94
+**Relevance score:** 94.0/100
 ...
 
 ### Protocol Steps
@@ -180,7 +196,7 @@ The report is written to `output/protocols_<timestamp>.md`.
 - **Decoupled layers** — `models/` ↦ `api_clients/` ↦ `processors/` ↦ `utils/`; no circular imports.
 - **Async throughout** — `httpx.AsyncClient` + `asyncio.gather` for concurrent multi-source fan-out.
 - **Rate limiting** — each API client has its own `RateLimiter` (token-bucket); 429 responses trigger exponential backoff.
-- **Citation Investigator** — if an extracted step defers to another paper (`"as described in [14]"`), Pipetly resolves the citation key to a DOI via the bibliography, fetches that paper's full text, and recursively re-extracts the missing details.
+- **Staged full-text normalization** — Step 4 fetches raw payloads, Step 5 converts to clean plain text, and Step 6 applies length-based quality gating.
 - **Graceful degradation** — missing API keys silently skip that source; network errors are logged and the pipeline continues.
 
 ---

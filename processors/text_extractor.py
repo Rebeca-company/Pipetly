@@ -1,6 +1,6 @@
-"""Step 4 – Text Extraction.
+"""Step 5 – Text Extraction.
 
-Convert raw full-text content stored by Step 3 into clean, normalised
+Convert raw full-text content stored by Step 4 into clean, normalised
 plain text that downstream steps (filtering, protocol extraction) can
 process reliably.
 
@@ -54,12 +54,12 @@ except ImportError:
     _LXML_AVAILABLE = False
     logger.debug("lxml not installed – robust HTML recovery disabled.")
 
-# Collapse runs of whitespace / newlines
-_WHITESPACE_RE = re.compile(r"\s{2,}")
+# Collapse any whitespace (spaces, tabs, newlines) into a single space.
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 class TextExtractor:
-    """Step 4: convert raw full-text payloads into normalised plain text."""
+    """Step 5: convert raw full-text payloads into normalised plain text."""
 
     def extract_all(self, papers: List[Paper]) -> List[Paper]:
         """
@@ -69,6 +69,7 @@ class TextExtractor:
         Returns only papers for which full text was successfully extracted
         (papers with no raw content or failed extraction are dropped).
         """
+        logger.info("Step 5 start - Text extraction on %d papers.", len(papers))
         extracted = converted = no_text = 0
 
         for paper in papers:
@@ -99,11 +100,17 @@ class TextExtractor:
 
         with_text = [p for p in papers if p.full_text is not None]
         logger.info(
-            "Step 4 – Text extraction: %d already plain | %d converted | %d no text (dropped) → %d kept.",
+            "Step 5 - Text extraction: %d already plain | %d converted | %d no text (dropped) -> %d kept.",
             extracted,
             converted,
             no_text,
             len(with_text),
+        )
+        logger.info(
+            "Step 5 complete - Text extraction finished with %d/%d papers retained and %d dropped.",
+            len(with_text),
+            len(papers),
+            no_text,
         )
         return with_text
 
@@ -202,7 +209,7 @@ class TextExtractor:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _normalise(text: str) -> str:
-    """Collapse redundant whitespace and strip leading/trailing space."""
+    """Collapse whitespace/newlines and strip leading/trailing space."""
     return _WHITESPACE_RE.sub(" ", text).strip()
 
 
@@ -247,8 +254,11 @@ if __name__ == "__main__":
     from models.paper import Paper  # noqa: F811
 
     _papers = load_model_list(STEP4_FILE, Paper)
+    print("[Step 5] START | Text Extraction")
     _before = len(_papers)
     _extracted = TextExtractor().extract_all(_papers)
     save_json(_extracted, STEP5_FILE)
     print(f"{len(_extracted)} / {_before} papers have clean plain text.")
-    print(f"Saved → intermediate_outputs/{STEP5_FILE}")
+    print(
+        f"[Step 5] DONE | input={_before} output={len(_extracted)} | Output: intermediate_outputs/{STEP5_FILE}"
+    )

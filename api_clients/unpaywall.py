@@ -9,7 +9,9 @@ Docs: https://unpaywall.org/products/api
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional
+from urllib.parse import quote
 
 import base64
 
@@ -21,6 +23,15 @@ logger = logging.getLogger(__name__)
 _settings = get_settings()
 
 _API_URL = "https://api.unpaywall.org/v2/{doi}"
+_MIN_TEXT_CHARS = 4000
+_PREVIEW_MARKERS = (
+    "sign in",
+    "purchase",
+    "subscribe",
+    "access through your institution",
+    "buy article",
+    "redirecting",
+)
 
 
 class UnpaywallClient(BaseAPIClient):
@@ -50,36 +61,80 @@ class UnpaywallClient(BaseAPIClient):
         # Step 1: resolve the DOI to the best OA location
         try:
             resp = await self._get(
-                _API_URL.format(doi=paper.doi), params={"email": email}
+                _API_URL.format(doi=quote(paper.doi, safe="")), params={"email": email}
             )
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
             logger.warning("Unpaywall lookup failed for %s: %s", paper.doi, exc)
             return None
 
-        # Prefer the best_oa_location's direct PDF URL; fall back to other locations
-        pdf_url: Optional[str] = None
+        # Prefer direct PDF URLs, then try OA landing/fulltext links.
+        candidates: list[str] = []
+
+        def _push(url: Optional[str]) -> None:
+            if url and url not in candidates:
+                candidates.append(url)
+
         best = data.get("best_oa_location") or {}
-        pdf_url = best.get("url_for_pdf")
-        if not pdf_url:
-            for loc in data.get("oa_locations", []):
-                if loc.get("url_for_pdf"):
-                    pdf_url = loc["url_for_pdf"]
-                    break
+        _push(best.get("url_for_pdf"))
+        _push(best.get("url"))
+        _push(best.get("url_for_landing_page"))
 
-        if not pdf_url:
-            logger.debug("Unpaywall: no OA PDF found for %s", paper.doi)
+        for loc in data.get("oa_locations", []):
+            _push(loc.get("url_for_pdf"))
+            _push(loc.get("url"))
+            _push(loc.get("url_for_landing_page"))
+
+        if not candidates:
+            logger.debug("Unpaywall: no OA URL candidates found for %s", paper.doi)
             return None
 
-        # Step 2: download the PDF
-        try:
-            pdf_bytes = await self._get_bytes(pdf_url)
-            if not pdf_bytes:
-                return None
-            b64 = base64.b64encode(pdf_bytes).decode("ascii")
+        # Step 2: download from candidates until one yields usable full text.
+        for url in candidates:
+            try:
+                result = await self._download_candidate(url)
+                if result is not None:
+                    return result
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Unpaywall candidate failed for %s (%s): %s", paper.doi, url, exc)
+
+        return None
+
+    async def _download_candidate(self, url: str) -> Optional[FullText]:
+        raw_bytes = await self._get_bytes(url)
+        if not raw_bytes:
+            return None
+
+        probe = raw_bytes[:1024].lstrip(b"\xef\xbb\xbf\r\n\t ")
+        if probe.startswith(b"%PDF"):
+            b64 = base64.b64encode(raw_bytes).decode("ascii")
             return FullText(format=FullTextFormat.PDF, content=b64)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Unpaywall PDF download failed for %s (%s): %s", paper.doi, pdf_url, exc
-            )
+
+        text = raw_bytes.decode("utf-8", errors="replace").strip()
+        if not text:
             return None
+
+        head = text[:3000].lower().lstrip()
+        is_html = head.startswith("<") and ("<html" in head or "<!doctype" in head)
+        plain_len = len(_strip_tags_and_normalise(text)) if is_html else len(_collapse_ws(text))
+        if _looks_like_preview(text, plain_len):
+            return None
+
+        fmt = FullTextFormat.HTML if is_html else FullTextFormat.PLAIN
+        return FullText(format=fmt, content=text)
+
+
+def _looks_like_preview(text: str, plain_len: int) -> bool:
+    body = text[:8000].lower()
+    marker_hits = sum(1 for marker in _PREVIEW_MARKERS if marker in body)
+    return marker_hits >= 2 or plain_len < _MIN_TEXT_CHARS
+
+
+def _strip_tags_and_normalise(text: str) -> str:
+    no_scripts = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\\1>", " ", text)
+    no_head = re.sub(r"(?is)<head[^>]*>.*?</head>", " ", no_scripts)
+    return _collapse_ws(re.sub(r"<[^>]+>", " ", no_head))
+
+
+def _collapse_ws(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()

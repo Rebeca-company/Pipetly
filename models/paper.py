@@ -31,11 +31,6 @@ class Paper(BaseModel):
     year: Optional[int] = None
     source: str = Field(..., description="API that returned this record (e.g. 'europe_pmc').")
     url: Optional[str] = None
-    query_type: Optional[str] = Field(
-        default=None,
-        description="Query expansion strategy that produced this record "
-                    "(structured_boolean | concept_strings).",
-    )
     response_time_ms: Optional[float] = Field(
         default=None,
         description="Round-trip time of the search() call that returned this record (ms).",

@@ -1,6 +1,6 @@
 """Module 1 – Query Expansion.
 
-Uses Gemini 1.5 Flash (via OpenRouter) to transform the raw user prompt
+Uses Gemini 3 Flash (via OpenRouter) to transform the raw user prompt
 into structured keyword and semantic queries.
 """
 from __future__ import annotations
@@ -17,34 +17,36 @@ from models.query import ExpandedQuery
 logger = logging.getLogger(__name__)
 _s = get_settings()
 
-_SYSTEM_PROMPT = _SYSTEM_PROMPT = """You are an expert academic search architect specializing in multi-database query optimization.  
+_SYSTEM_PROMPT = """You are an expert academic search architect specializing in multi-database query optimization.
 
 ## Your job
 Given a description of an experimental technique or research need, generate optimized search queries to retrieve relevant scientific papers.
 
+## Intent precision rules (critical)
+- The `intent` field must be a faithful, one-sentence restatement of the user's request.
+- The intent must not include phrases like "Search for papers about..." or "I want to find...". It should be a direct description of the research topic or technique of interest.
+- Do not add assumptions, background context, or inferred details that are not present in the user prompt.
+- Do not broaden or narrow scope beyond what the user asked.
+- If information is missing, keep the intent minimal rather than inventing content.
+- Preserve key entities exactly when possible (targets, diseases, organisms, techniques).
+
 ## Query construction rules
 
-### structured_boolean (Europe PMC, Scopus, PubMed)
-- Use AND between layers, OR within each layer for synonyms and related terms
-- Use field tags [title] or [abstract] on the most specific terms
-- Generate queries ranging from broad (1–2 layers) to narrow (3–4 layers)
-- Include MeSH terms where applicable, paired with free-text synonyms
-
 ### concept_strings (OpenAlex, CrossRef, Semantic Scholar)
-- 2–5 terms per string, no operators, no full sentences
-- Include synonyms and established abbreviations as separate strings
+- 2-5 terms per string; no operators and no full sentences.
+- Include synonyms and established abbreviations as separate strings.
 
 ## Output rules
-- Generate 3–5 queries per category, varying from broad to narrow in specificity.
-- Vary synonyms and adjacent concepts across strings
-- Do not repeat the same phrase across more than 3 queries in a category
-- Every term must belong to the biological domain of the user's question
-- Prioritize specificity: a narrow query that returns 50 highly relevant papers is better than a broad one returning 5000 mixed results
+- Generate 4–8 concept_strings, varying from broad to narrow in specificity.
+- Vary synonyms and adjacent concepts across strings.
+- Do not repeat the same phrase in more than 3 queries.
+- Every term must belong to the biological domain of the user's question.
+- Prioritize specificity: a narrow query that returns 50 highly relevant papers is better than a broad query that returns 5000 mixed results.
 
 ## What NOT to include in queries
-- Do not add methodological terms (e.g., "protocol", "assay", "sequencing")
-- Do not add study-type terms (e.g., "study", "analysis", "investigation", "research", "review") — these are noise, not signal
-- Do not add generic scientific verbs (e.g., "role of", "effect of", "impact of") unless they are part of an established technical term
+- Do not add methodological terms (e.g., "protocol", "assay", "sequencing").
+- Do not add study-type terms (e.g., "study", "analysis", "investigation", "research", "review"); these are noise, not signal.
+- Do not add generic scientific verbs (e.g., "role of", "effect of", "impact of") unless they are part of an established technical term.
 """
 
 _EXPANDED_QUERY_SCHEMA:dict = {
@@ -55,12 +57,7 @@ _EXPANDED_QUERY_SCHEMA:dict = {
         "properties": {
             "intent": {
                 "type": "string",
-                "description": "One-sentence summary of the user's research intent.",
-            },
-            "structured_boolean": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Queries optimized for Europe PMC/Scopus (e.g., '(term1 OR term2) AND method[title]')",
+                "description": "One-sentence, high-fidelity restatement of the user's request with no added assumptions.",
             },
             "concept_strings": {
                 "type": "array",
@@ -68,7 +65,7 @@ _EXPANDED_QUERY_SCHEMA:dict = {
                 "description": "Clean keyword strings for OpenAlex/Crossref/Unpaywall.",
             },
         },
-        "required": ["intent", "structured_boolean", "concept_strings"],
+        "required": ["intent", "concept_strings"],
         "additionalProperties": False,
     },
 }
@@ -88,7 +85,7 @@ class QueryExpander:
 
     async def expand(self, user_prompt: str) -> ExpandedQuery:
         payload: dict[str, Any] = {
-            "model": _s.gemini_model,
+            "model": _s.gemini_model_general,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -134,12 +131,15 @@ if __name__ == "__main__":
     _prompt = " ".join(sys.argv[1:])
 
     async def _main() -> None:
+        print("[Step 1] START | Query Expansion")
         expander = QueryExpander()
         expanded = await expander.expand(_prompt)
         save_json(expanded, STEP1_FILE)
         print(f"Intent  : {expanded.intent}")
-        print(f"structured_boolean: {expanded.structured_boolean}")
         print(f"concept_strings: {expanded.concept_strings}")
-        print(f"\nSaved → intermediate_outputs/{STEP1_FILE}")
+        print(
+            f"[Step 1] DONE | intent_generated=true concept_queries={len(expanded.concept_strings)} "
+            f"| Output: intermediate_outputs/{STEP1_FILE}"
+        )
 
     asyncio.run(_main())

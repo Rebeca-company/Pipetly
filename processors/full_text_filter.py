@@ -2,7 +2,7 @@
 
 Applied after Step 5 to keep papers whose full-text length falls within the
 accepted range. Deduplication and DOI checking have already been performed in
-Step 2 (:class:`processors.metadata_filter.MetadataFilter`).
+Step 3 (:class:`processors.metadata_filter.MetadataFilter`).
 """
 from __future__ import annotations
 
@@ -13,14 +13,15 @@ from models.paper import Paper
 
 logger = logging.getLogger(__name__)
 
-MIN_CHARS = 3_000
-MAX_CHARS = 3_000_000
+MIN_CHARS = 10_000
+MAX_CHARS = 200_000
 
 
 class FullTextFilter:
     """Post-extraction filter: keep only papers within the configured length range."""
 
     def run(self, papers: List[Paper]) -> List[Paper]:
+        logger.info("Step 6 start - Post-extraction filter on %d papers.", len(papers))
         accepted: list[Paper] = []
         discarded_no_text = discarded_too_short = discarded_too_long = 0
 
@@ -61,6 +62,7 @@ class FullTextFilter:
             discarded_too_long,
             MAX_CHARS,
         )
+        logger.info("Step 6 complete - Post-extraction filter finished.")
         return accepted
 
 
@@ -84,8 +86,11 @@ if __name__ == "__main__":
     from models.paper import Paper  # noqa: F811
 
     _papers = load_model_list(STEP5_FILE, Paper)
+    print("[Step 6] START | Post-Extraction Filter")
     _filter = FullTextFilter()
     _filtered = _filter.run(_papers)
     save_json(_filtered, STEP6_FILE)
     print(f"{len(_filtered)} papers passed post-extraction filter.")
-    print(f"Saved → intermediate_outputs/{STEP6_FILE}")
+    print(
+        f"[Step 6] DONE | input={len(_papers)} output={len(_filtered)} | Output: intermediate_outputs/{STEP6_FILE}"
+    )

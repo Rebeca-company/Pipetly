@@ -17,21 +17,31 @@ class ProtocolStep(BaseModel):
     citation_ref: Optional[str] = None
 
 
+class InheritedReference(BaseModel):
+    """Reference to an inherited protocol detail from an ancestor paper."""
+
+    context_phrase: str
+    target_doi: str
+    resolved_fragment: Optional[str] = None
+    resolution_depth: Optional[int] = None
+
+
 class ExtractedProtocol(BaseModel):
     """Full protocol extracted from a single paper."""
 
     source_doi: Optional[str] = None
     source_title: str
-    protocol_name: str
-    steps: List[ProtocolStep]
-    # Raw citation markers that need external resolution
+    protocol_text: str = ""
+    # Score from 0 to 100 aligned with user intent
+    relevance_score: float = Field(default=0.0, ge=0.0, le=100.0)
+    inherited_references: List[InheritedReference] = Field(default_factory=list)
+
     unresolved_citations: List[str] = Field(default_factory=list)
-    raw_bibliography: Optional[str] = None
 
 
 class ScoredProtocol(BaseModel):
     """A ranked protocol ready for output."""
 
     protocol: ExtractedProtocol
-    score: float = Field(..., ge=0.0, le=1.0)
+    score: float = Field(..., ge=0.0, le=100.0)
     reasoning: str

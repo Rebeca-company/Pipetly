@@ -1,10 +1,10 @@
-"""Step 3 – Full-Text Retrieval.
+"""Step 4 – Full-Text Retrieval.
 
 For every filtered paper, try all configured API clients in priority order and
 store the first successful retrieval as a raw :class:`~models.paper.FullText`
 object (PDF base-64, XML, HTML, or plain text).
 
-Text extraction and format conversion happen in Step 4
+Text extraction and format conversion happen in Step 5
 (:mod:`processors.text_extractor`).
 """
 from __future__ import annotations
@@ -17,13 +17,12 @@ import time as _time
 from typing import List, Optional, Tuple
 
 from api_clients import (
-    COREClient,
     ElsevierClient,
     EuropePMCClient,
-    OpenAlexClient,
     PMCClient,
-    SemanticScholarClient,
     UnpaywallClient,
+    SemanticScholarClient,
+    OpenAlexClient,
 )
 from models.paper import FullText, Paper
 
@@ -31,17 +30,16 @@ logger = logging.getLogger(__name__)
 
 
 class FullTextRetriever:
-    """Step 3: attempt to fetch raw full-text for each paper from all sources."""
+    """Step 4: attempt to fetch raw full-text for each paper from all sources."""
 
     # Priority order: open-access XML sources first, then PDF sources
     _CLIENT_ORDER = [
         ElsevierClient,
         EuropePMCClient,
         PMCClient,
-        OpenAlexClient,
         SemanticScholarClient,
         UnpaywallClient,
-        COREClient,
+        OpenAlexClient,
     ]
 
     async def retrieve(self, papers: List[Paper]) -> List[Paper]:
@@ -52,6 +50,7 @@ class FullTextRetriever:
 
         Returns only papers for which full text could be retrieved.
         """
+        logger.info("Step 4 start - Full-text retrieval on %d papers.", len(papers))
         async with contextlib.AsyncExitStack() as stack:
             all_clients = [await stack.enter_async_context(cls()) for cls in self._CLIENT_ORDER]
 
@@ -93,11 +92,12 @@ class FullTextRetriever:
             p for p in papers if p.full_text is not None and p.full_text.content.strip()
         ]
         logger.info(
-            "Step 3 – Full-text retrieved for %d / %d papers. Returning %d papers with full text.",
+            "Step 4 - Full-text retrieved for %d / %d papers. Returning %d papers with full text.",
             found,
             len(papers),
             len(papers_with_full_text),
         )
+        logger.info("Step 4 complete - Full-text retrieval finished.")
         return papers_with_full_text
 
 
@@ -106,10 +106,9 @@ _CLIENT_LABELS = {
     "EuropePMCClient": "europe_pmc",
     "PMCClient": "pmc",
     "ElsevierClient": "elsevier",
-    "OpenAlexClient": "openalex",
-    "SemanticScholarClient": "semantic_scholar",
     "UnpaywallClient": "unpaywall",
-    "COREClient": "core",
+    "OpenAlexClient": "openalex",
+    "SemanticScholarClient": "semantic_scholar"    
 }
 
 _PMCID_RE = re.compile(r"PMC\d+", re.IGNORECASE)
@@ -158,7 +157,7 @@ if __name__ == "__main__":
     import logging  # noqa: F811
 
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
         datefmt="%H:%M:%S",
     )
@@ -167,11 +166,14 @@ if __name__ == "__main__":
     from utils.intermediate_io import STEP3_FILE, STEP4_FILE, load_model_list, save_json
 
     async def _main() -> None:
+        print("[Step 4] START | Full-Text Retrieval")
         papers = load_model_list(STEP3_FILE, Paper)
         total = len(papers)
         papers = await FullTextRetriever().retrieve(papers)
         save_json(papers, STEP4_FILE)
         print(f"Full text retrieved for {len(papers)} / {total} papers.")
-        print(f"Saved -> intermediate_outputs/{STEP4_FILE}")
+        print(
+            f"[Step 4] DONE | input={total} output={len(papers)} | Output: intermediate_outputs/{STEP4_FILE}"
+        )
 
     asyncio.run(_main())

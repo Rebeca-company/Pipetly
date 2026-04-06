@@ -31,7 +31,7 @@ class ElsevierClient(BaseAPIClient):
             "X-ELS-APIKey": _settings.elsevier_api_key,
             "Accept": accept,
         }
-        if hasattr(_settings, 'elsevier_inst_token') and _settings.elsevier_inst_token:
+        if _settings.elsevier_inst_token:
             headers["X-ELS-Insttoken"] = _settings.elsevier_inst_token
         return headers
 

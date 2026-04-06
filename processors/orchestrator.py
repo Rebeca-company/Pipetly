@@ -1,12 +1,12 @@
 """Multi-Source Paper Search Orchestrator.
 
-Coordinates the modular pipeline steps:
+Coordinates global pipeline Steps 2 through 6:
 
-1. :class:`~processors.paper_searcher.PaperSearcher`   – search all APIs for metadata
-2. :class:`~processors.metadata_filter.MetadataFilter` – dedup + DOI filter
-3. :class:`~processors.full_text_retriever.FullTextRetriever` – raw full-text fetch
-4. :class:`~processors.text_extractor.TextExtractor`   – convert to clean plain text
-5. :class:`~processors.full_text_filter.FullTextFilter` – keep papers with methods section
+2. :class:`~processors.paper_searcher.PaperSearcher`   - search all APIs for metadata
+3. :class:`~processors.metadata_filter.MetadataFilter` - dedup + DOI filter
+4. :class:`~processors.full_text_retriever.FullTextRetriever` - raw full-text fetch
+5. :class:`~processors.text_extractor.TextExtractor`   - convert to clean plain text
+6. :class:`~processors.full_text_filter.FullTextFilter` - keep papers within accepted text-length bounds
 
 Use this class when you want a single entry point that runs all steps
 end-to-end, or call each step class directly for fine-grained control.
@@ -46,20 +46,21 @@ class MultiSourceOrchestrator:
         """
         Execute the paper search pipeline:
 
-        1. **Search** – fan out queries across all API clients.
-        2. **Filter** – deduplicate and require a DOI.
-        3. **Retrieve** – fetch raw full-text (PDF / XML / HTML / plain).
-        4. **Extract** – convert to normalised plain text; abstract fallback.
-        5. **Post-filter** – keep only papers with usable full text and methods section.
+        2. **Search** - fan out queries across all API clients.
+        3. **Filter** - deduplicate and require a DOI.
+        4. **Retrieve** - fetch raw full-text (PDF / XML / HTML / plain).
+        5. **Extract** - convert to normalised plain text.
+        6. **Post-filter** - keep only papers with usable full text length.
 
         Returns papers ready for protocol extraction (post-filtered).
         """
-        # Step 1 – Paper and Metadata Search
+        logger.info("Orchestrator start - running Steps 2 to 6.")
+        # Step 2 - Paper and metadata search
         papers = await PaperSearcher().search(expanded_query)
         if save_intermediate:
             save_json(papers, STEP2_FILE)
 
-        # Step 2 – Metadata Filtering (dedup + DOI)
+        # Step 3 - Metadata filtering (dedup + DOI)
         papers = MetadataFilter().run(papers)
         if not papers:
             logger.warning("No papers with a DOI found after metadata filtering.")
@@ -67,21 +68,22 @@ class MultiSourceOrchestrator:
         if save_intermediate:
             save_json(papers, STEP3_FILE)
 
-        # Step 3 – Full-Text Retrieval
+        # Step 4 - Full-text retrieval
         papers = await FullTextRetriever().retrieve(papers)
         if save_intermediate:
             save_json(papers, STEP4_FILE)
 
-        # Step 4 – Text Extraction (PDF / XML / HTML → plain text)
+        # Step 5 - Text extraction (PDF/XML/HTML to plain text)
         papers = TextExtractor().extract_all(papers)
         if save_intermediate:
             save_json(papers, STEP5_FILE)
 
-        # Step 5 – Full-Text Filter (methods section required)
+        # Step 6 - Full-text length filter
         papers = FullTextFilter().run(papers)
         if save_intermediate:
             save_json(papers, STEP6_FILE)
 
+        logger.info("Orchestrator complete - returning %d papers after Step 6.", len(papers))
         return papers
 
 
@@ -104,11 +106,19 @@ if __name__ == "__main__":
     from models.query import ExpandedQuery
 
     async def _main() -> None:
+        print("[Orchestrator] START | Steps 2-6")
         expanded = load_model(STEP1_FILE, ExpandedQuery)
         orchestrator = MultiSourceOrchestrator()
         papers = await orchestrator.fetch_papers(expanded, save_intermediate=True)
         print(f"Pipeline produced {len(papers)} papers after full-text filter.")
-        print(f"Saved intermediates → step2..step6")
+        print(
+            f"[Orchestrator] DONE | output={len(papers)} | Outputs: "
+            f"intermediate_outputs/{STEP2_FILE}, "
+            f"intermediate_outputs/{STEP3_FILE}, "
+            f"intermediate_outputs/{STEP4_FILE}, "
+            f"intermediate_outputs/{STEP5_FILE}, "
+            f"intermediate_outputs/{STEP6_FILE}"
+        )
 
     asyncio.run(_main())
 

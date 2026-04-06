@@ -5,8 +5,9 @@ Docs: https://docs.openalex.org/
 from __future__ import annotations
 
 import logging
+import re
+from html.parser import HTMLParser
 from typing import List, Optional
-from urllib.parse import quote
 
 import base64
 
@@ -18,6 +19,21 @@ logger = logging.getLogger(__name__)
 _WORKS_URL = "https://api.openalex.org/works"
 _SINGLE_WORK_URL = "https://api.openalex.org/works/doi:{doi}"
 _SELECT = "id,doi,title,authorships,abstract_inverted_index,publication_year,open_access,primary_location"
+_FULLTEXT_SELECT = "open_access,best_oa_location,primary_location,locations"
+_MIN_TEXT_CHARS = 4000
+_LANDING_MARKERS = (
+    "redirecting",
+    "auto article locator",
+    "document.getelementbyid",
+    "window.location",
+    "javascript",
+    "sign in",
+    "purchase",
+    "subscribe",
+    "buy article",
+    "access through your institution",
+    "name=\"access\" content=\"no\"",
+)
 
 
 class OpenAlexClient(BaseAPIClient):
@@ -51,10 +67,8 @@ class OpenAlexClient(BaseAPIClient):
                 for a in item.get("authorships", [])
             ]
             abstract = _rebuild_abstract(item.get("abstract_inverted_index"))
-            oa_url = (
-                (item.get("open_access") or {}).get("oa_url")
-                or (item.get("primary_location") or {}).get("landing_page_url")
-            )
+            candidates = _extract_candidate_urls(item)
+            oa_url = candidates[0] if candidates else None
             papers.append(
                 Paper(
                     doi=doi,
@@ -76,49 +90,84 @@ class OpenAlexClient(BaseAPIClient):
         ``paper.url`` only for papers already sourced from OpenAlex.
         """
         oa_url: Optional[str] = None
+        candidates: list[str] = []
 
         if paper.doi:
             try:
                 resp = await self._get(
                     _SINGLE_WORK_URL.format(doi=paper.doi),
-                    params={"select": "open_access,primary_location"},
+                    params={"select": _FULLTEXT_SELECT},
                     headers=self._headers(),
                 )
                 data = resp.json()
-                oa_url = (
-                    (data.get("open_access") or {}).get("oa_url")
-                    or (data.get("primary_location") or {}).get("landing_page_url")
-                )
+                candidates.extend(_extract_candidate_urls(data))
             except Exception as exc:  # noqa: BLE001
                 logger.debug("OpenAlex DOI lookup failed for %s: %s", paper.doi, exc)
 
         # Only fall back to the stored URL when it actually came from OpenAlex
-        if not oa_url and paper.source == "openalex":
-            oa_url = paper.url
+        if paper.source == "openalex" and paper.url:
+            candidates.append(paper.url)
 
-        if not oa_url:
+        # Keep order stable while removing duplicates.
+        unique_candidates: list[str] = []
+        for url in candidates:
+            if url and url not in unique_candidates:
+                unique_candidates.append(url)
+
+        if not unique_candidates:
             return None
 
-        try:
-            raw_bytes = await self._get_bytes(oa_url)
+        for oa_url in unique_candidates:
+            try:
+                ft = await self._download_candidate(oa_url)
+                if ft is not None:
+                    return ft
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("OpenAlex candidate failed for %s (%s): %s", paper.doi, oa_url, exc)
 
-            # Robust PDF detection: look for %PDF after optional whitespace/BOM in first KB
-            probe = raw_bytes[:1024].lstrip(b"\r\n\t \ufeff")
-            if b"%PDF" in probe[:20]:
-                b64 = base64.b64encode(raw_bytes).decode("ascii")
-                return FullText(format=FullTextFormat.PDF, content=b64)
+        return None
 
-            text = raw_bytes.decode("utf-8", errors="replace").strip()
-            if not text:
-                return None
-
-            head = text[:200].lower().lstrip()
-            is_html = head.startswith("<") and ("<html" in head or "<!doctype" in head)
-            fmt = FullTextFormat.HTML if is_html else FullTextFormat.PLAIN
-            return FullText(format=fmt, content=text)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("OpenAlex full-text fetch failed for %s: %s", paper.doi, exc)
+    async def _download_candidate(self, oa_url: str) -> Optional[FullText]:
+        resp = await self._get(oa_url, headers=self._headers())
+        raw_bytes = resp.content
+        if not raw_bytes:
             return None
+
+        content_type = (resp.headers.get("content-type") or "").lower()
+        probe = raw_bytes[:1024].lstrip(b"\xef\xbb\xbf\r\n\t ")
+        if "application/pdf" in content_type or probe.startswith(b"%PDF"):
+            b64 = base64.b64encode(raw_bytes).decode("ascii")
+            return FullText(format=FullTextFormat.PDF, content=b64)
+
+        text = raw_bytes.decode("utf-8", errors="replace").strip()
+        if not text:
+            return None
+
+        head = text[:3000].lower().lstrip()
+        is_html = head.startswith("<") and ("<html" in head or "<!doctype" in head)
+
+        # Some landing pages expose a direct PDF link in metadata.
+        if is_html:
+            meta_pdf_url = _extract_meta_pdf_url(text)
+            if meta_pdf_url and meta_pdf_url != oa_url:
+                try:
+                    pdf_resp = await self._get(meta_pdf_url, headers=self._headers())
+                    pdf_probe = pdf_resp.content[:1024].lstrip(b"\xef\xbb\xbf\r\n\t ")
+                    if ("application/pdf" in (pdf_resp.headers.get("content-type") or "").lower()) or pdf_probe.startswith(b"%PDF"):
+                        b64 = base64.b64encode(pdf_resp.content).decode("ascii")
+                        return FullText(format=FullTextFormat.PDF, content=b64)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("OpenAlex meta PDF candidate failed for %s: %s", meta_pdf_url, exc)
+
+        if is_html and _looks_like_landing_or_preview(text):
+            return None
+
+        plain_len = len(_html_visible_text(text)) if is_html else len(_collapse_ws(text))
+        if plain_len < _MIN_TEXT_CHARS:
+            return None
+
+        fmt = FullTextFormat.HTML if is_html else FullTextFormat.PLAIN
+        return FullText(format=fmt, content=text)
 
 
 def _rebuild_abstract(inverted_index: Optional[dict]) -> Optional[str]:
@@ -132,3 +181,89 @@ def _rebuild_abstract(inverted_index: Optional[dict]) -> Optional[str]:
     if not words:
         return None
     return " ".join(words[i] for i in sorted(words))
+
+
+def _extract_candidate_urls(record: dict) -> list[str]:
+    """Return OA candidates with direct PDF links first."""
+    out: list[str] = []
+
+    def _push(url: Optional[str]) -> None:
+        if url and url not in out:
+            out.append(url)
+
+    best = record.get("best_oa_location") or {}
+    primary = record.get("primary_location") or {}
+    open_access = record.get("open_access") or {}
+    locations = record.get("locations") or []
+
+    for loc in [best, primary, *locations]:
+        if not isinstance(loc, dict):
+            continue
+        _push(loc.get("pdf_url"))
+        _push((loc.get("source") or {}).get("hosted_fulltext_url"))
+
+    _push(open_access.get("oa_url"))
+
+    for loc in [best, primary, *locations]:
+        if not isinstance(loc, dict):
+            continue
+        _push(loc.get("landing_page_url"))
+
+    return out
+
+
+def _looks_like_landing_or_preview(text: str) -> bool:
+    body = text[:8000].lower()
+    marker_hits = sum(1 for marker in _LANDING_MARKERS if marker in body)
+    plain_len = len(_strip_tags_and_normalise(body))
+    return marker_hits >= 2 or plain_len < _MIN_TEXT_CHARS
+
+
+def _strip_tags_and_normalise(text: str) -> str:
+    no_boilerplate = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\\1>", " ", text)
+    no_boilerplate = re.sub(r"(?is)<head[^>]*>.*?</head>", " ", no_boilerplate)
+    return _collapse_ws(re.sub(r"<[^>]+>", " ", no_boilerplate))
+
+
+def _collapse_ws(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _extract_meta_pdf_url(html_text: str) -> Optional[str]:
+    match = re.search(
+        r"<meta[^>]+name=[\"']citation_pdf_url[\"'][^>]+content=[\"']([^\"']+)[\"']",
+        html_text,
+        flags=re.IGNORECASE,
+    )
+    return match.group(1).strip() if match else None
+
+
+def _html_visible_text(html_text: str) -> str:
+    parser = _HTMLVisibleExtractor()
+    parser.feed(html_text)
+    parser.close()
+    return _collapse_ws(parser.get_text())
+
+
+class _HTMLVisibleExtractor(HTMLParser):
+    _SKIP_TAGS = frozenset({"script", "style", "head", "noscript"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip_depth: int = 0
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag.lower() in self._SKIP_TAGS:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in self._SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            self._parts.append(data)
+
+    def get_text(self) -> str:
+        return " ".join(self._parts)

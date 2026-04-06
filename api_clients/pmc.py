@@ -10,6 +10,7 @@ import asyncio
 import logging
 import re
 import time as _time
+import xml.etree.ElementTree as ET
 from typing import List, Optional
 
 from config import get_settings
@@ -24,6 +25,8 @@ _ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 _ESUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
 _EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 _BIOC_URL = "https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi"
+_MIN_BODY_CHARS = 3000
+_MIN_BODY_PARAGRAPHS = 6
 
 _TOOL = "Pipetly"
 _EMAIL = "contact@pipetly.bot"
@@ -161,7 +164,7 @@ class PMCClient(BaseAPIClient):
 
         # Try BioC (fast, OA subset) before Entrez efetch
         bioc_xml = await self._fetch_bioc_xml(pmc_id)
-        if bioc_xml:
+        if bioc_xml and _looks_like_fulltext_xml(bioc_xml):
             return FullText(format=FullTextFormat.XML, content=bioc_xml)
 
         params = {
@@ -175,6 +178,9 @@ class PMCClient(BaseAPIClient):
             resp = await self._get(_EFETCH_URL, params=params)
             xml_text = resp.text.strip()
             if not xml_text or "<html" in xml_text.lower():
+                return None
+            if not _looks_like_fulltext_xml(xml_text):
+                logger.debug("PMC fetch returned non-full-text XML for %s", pmc_id)
                 return None
             return FullText(format=FullTextFormat.XML, content=xml_text)
         except Exception as exc:  # noqa: BLE001
@@ -213,3 +219,38 @@ def _safe_int(value: object) -> Optional[int]:
         return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+
+
+def _looks_like_fulltext_xml(xml_text: str) -> bool:
+    """Return True when XML contains a substantial article body."""
+    lower = xml_text.lower()
+    body_chars, body_paragraphs = _jats_body_metrics(xml_text)
+    if body_paragraphs > 0:
+        return body_chars >= _MIN_BODY_CHARS or body_paragraphs >= _MIN_BODY_PARAGRAPHS
+
+    # BioC payloads can omit <body>; use a conservative text-length fallback.
+    if "<collection" in lower and "<passage" in lower:
+        return len(_strip_xml_tags(xml_text)) >= 6000
+
+    return False
+
+
+def _jats_body_metrics(xml_text: str) -> tuple[int, int]:
+    """Extract body text length and paragraph count from JATS-like XML."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return 0, 0
+
+    body = root.find(".//{*}body")
+    if body is None:
+        return 0, 0
+
+    body_parts = [text.strip() for text in body.itertext() if text and text.strip()]
+    body_text = " ".join(body_parts)
+    body_paragraphs = len(body.findall(".//{*}p"))
+    return len(body_text), body_paragraphs
+
+
+def _strip_xml_tags(xml_text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", xml_text)).strip()

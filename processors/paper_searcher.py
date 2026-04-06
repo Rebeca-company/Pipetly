@@ -1,8 +1,8 @@
-"""Step 1 – Paper and Metadata Search.
+"""Step 2 – Paper and Metadata Search.
 
 Fan out all keyword queries across every configured API client and collect
 raw paper metadata records.  Duplicates and papers without DOIs are kept at
-this stage; they are cleaned up in Step 2 (MetadataFilter).
+this stage; they are cleaned up in Step 3 (MetadataFilter).
 """
 from __future__ import annotations
 
@@ -15,48 +15,32 @@ from config import get_settings
 from models.paper import Paper
 from models.query import ExpandedQuery
 from api_clients import (
-    COREClient,
     CrossRefClient,
     ElsevierClient,
     EuropePMCClient,
     OpenAlexClient,
-    PMCClient,
     ScopusClient,
     SemanticScholarClient,
-    UnpaywallClient,
 )
 
 logger = logging.getLogger(__name__)
 _s = get_settings()
 
 # Clients that support search (Unpaywall has no search endpoint)
-_SEARCH_CLIENT_FACTORIES = [
-    (EuropePMCClient,      "europe_pmc"),
-    (SemanticScholarClient, "semantic_scholar"),
-    (ElsevierClient,       "elsevier"),
-    (CrossRefClient,       "crossref"),
-    (OpenAlexClient,       "openalex"),
-    (ScopusClient,         "scopus"),
-    (PMCClient,            "pmc"),
-    (COREClient,           "core"),
-]
-
-
 class PaperSearcher:
-    """Step 1: fan-out search over all API clients and return raw paper metadata."""
+    """Step 2: fan-out search over all API clients and return raw paper metadata."""
 
     async def search(self, expanded_query: ExpandedQuery) -> List[Paper]:
         """
         Execute **every** keyword query against **every** configured search API
-        concurrently so that the notebook can measure per-(API × query_type)
-        performance without any pre-filtering.  Each returned paper is tagged
-        with ``query_type`` (structured_boolean | concept_strings |
-        semantic_sentences) so downstream analysis can slice the data freely.
+        concurrently so that the notebook can measure per-API performance
+        without any pre-filtering.
 
-        Papers may be duplicated across sources and/or query types;
+        Papers may be duplicated across sources;
         deduplication is handled in
-        :class:`processors.metadata_filter.MetadataFilter` (Step 2).
+        :class:`processors.metadata_filter.MetadataFilter` (Step 3).
         """
+        logger.info("Step 2 start - Paper and metadata search.")
         all_papers: list[Paper] = []
 
         async with (
@@ -66,8 +50,6 @@ class PaperSearcher:
             CrossRefClient() as cr,
             OpenAlexClient() as oa,
             ScopusClient() as scopus,
-            # PMCClient() as pmc,
-            # COREClient() as core,
         ):
             ALL_APIS = [
                 (epmc,   "europe_pmc"),
@@ -76,8 +58,6 @@ class PaperSearcher:
                 (cr,     "crossref"),
                 (oa,     "openalex"),
                 (scopus, "scopus"),
-                # (pmc,    "pmc"),
-                # (core,   "core"),
             ]
 
 # ── Timed wrapper ─────────────────────────────────────────────
@@ -95,12 +75,6 @@ class PaperSearcher:
 
             tasks: list = []
 
-            # Route ALL three query types to ALL APIs for comprehensive evaluation
-            for q in expanded_query.structured_boolean:
-                for client, api_label in ALL_APIS:
-                    label = f"{api_label}|structured_boolean|{q[:40]}"
-                    tasks.append(_timed_search(client.search(q, _s.max_papers_per_source), label))
-
             for q in expanded_query.concept_strings:
                 for client, api_label in ALL_APIS:
                     label = f"{api_label}|concept_strings|{q[:40]}"
@@ -109,19 +83,21 @@ class PaperSearcher:
             # --- Concurrent execution (exceptions handled inside _timed_search) ---
             results = await asyncio.gather(*tasks)
 
-            for lbl, papers, elapsed_ms, is_err in results:
-                parts = lbl.split("|")
-                q_type = parts[1] if len(parts) > 1 else "unknown"
+            for _lbl, papers, elapsed_ms, is_err in results:
                 for paper in papers:
-                    paper.query_type     = q_type
                     paper.response_time_ms = elapsed_ms
                     paper.is_error       = is_err
                 all_papers.extend(papers)
 
         logger.info(
-            "Step 1 – collected %d raw paper records from %d search tasks.",
+            "Step 2 - Collected %d raw paper records from %d search tasks.",
             len(all_papers),
             len(tasks),
+        )
+        logger.info(
+            "Step 2 complete - Paper search finished with %d raw records across %d concept queries.",
+            len(all_papers),
+            len(expanded_query.concept_strings),
         )
         return all_papers
 
@@ -141,10 +117,13 @@ if __name__ == "__main__":
     from models.query import ExpandedQuery
 
     async def _main() -> None:
+        print("[Step 2] START | Paper and Metadata Search")
         expanded = load_model(STEP1_FILE, ExpandedQuery)
         papers = await PaperSearcher().search(expanded)
         save_json(papers, STEP2_FILE)
         print(f"Collected {len(papers)} raw papers.")
-        print(f"Saved → intermediate_outputs/{STEP2_FILE}")
+        print(
+            f"[Step 2] DONE | raw_records={len(papers)} | Output: intermediate_outputs/{STEP2_FILE}"
+        )
 
     asyncio.run(_main())

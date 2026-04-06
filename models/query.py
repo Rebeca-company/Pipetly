@@ -13,11 +13,6 @@ class ExpandedQuery(BaseModel):
         ...,
         description="One-sentence summary of what the user is looking for.",
     )
-    structured_boolean: List[str] = Field(
-        ...,
-        min_length=1,
-        description="Boolean search strings suitable for PubMed-style APIs.",
-    )
     concept_strings: List[str] = Field(
         ...,
         min_length=1,
