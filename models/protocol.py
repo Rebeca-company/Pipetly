@@ -21,7 +21,9 @@ class InheritedReference(BaseModel):
     """Reference to an inherited protocol detail from an ancestor paper."""
 
     context_phrase: str
-    target_doi: str
+    target_doi: Optional[str] = None
+    target_title: Optional[str] = None
+    target_year: Optional[int] = None
     resolved_fragment: Optional[str] = None
     resolution_depth: Optional[int] = None
 

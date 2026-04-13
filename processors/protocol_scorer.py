@@ -6,9 +6,10 @@ completeness, and alignment with user intent.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 
@@ -36,11 +37,7 @@ _SCORER_SCHEMA: dict = {
     "schema": {
         "type": "object",
         "properties": {
-            "relevance_score": {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 100,
-            }
+            "relevance_score": {"type": "number"}
         },
         "required": ["relevance_score"],
         "additionalProperties": False,
@@ -51,7 +48,7 @@ _SCORER_SCHEMA: dict = {
 class ProtocolScorer:
     """Re-score protocols after inherited-reference resolution."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_concurrent_scores: int = _s.llm_max_concurrent) -> None:
         self._base = _s.openrouter_base_url.rstrip("/")
         self._headers = {
             "Authorization": f"Bearer {_s.openrouter_api_key}",
@@ -59,6 +56,8 @@ class ProtocolScorer:
             "HTTP-Referer": "https://github.com/pipetly",
             "X-Title": "Pipetly",
         }
+        self._score_semaphore = asyncio.Semaphore(max_concurrent_scores)
+        self._http_client: Optional[httpx.AsyncClient] = None
 
     async def score_all(
         self,
@@ -67,12 +66,43 @@ class ProtocolScorer:
     ) -> list[ExtractedProtocol]:
         """Re-score all input protocols and return the updated list."""
         logger.info("Step 9 start - Re-scoring %d protocols.", len(protocols))
+        self._http_client = httpx.AsyncClient(
+            timeout=_s.http_timeout * 2,
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
+        )
+
+        try:
+            tasks = [
+                self._score_one_with_semaphore(protocol, user_intent)
+                for protocol in protocols
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        finally:
+            await self._http_client.aclose()
+            self._http_client = None
+
         rescored: list[ExtractedProtocol] = []
-        for protocol in protocols:
-            updated = await self._score_one(protocol, user_intent)
-            rescored.append(updated)
+        for protocol, result in zip(protocols, results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    "Protocol re-scoring failed for '%s': %s",
+                    protocol.source_title[:100],
+                    result,
+                )
+                rescored.append(protocol)
+                continue
+            rescored.append(result)
+
         logger.info("Step 9 complete - Re-scored %d protocols.", len(rescored))
         return rescored
+
+    async def _score_one_with_semaphore(
+        self,
+        protocol: ExtractedProtocol,
+        user_intent: str,
+    ) -> ExtractedProtocol:
+        async with self._score_semaphore:
+            return await self._score_one(protocol, user_intent)
 
     async def _score_one(self, protocol: ExtractedProtocol, user_intent: str) -> ExtractedProtocol:
         if not protocol.protocol_text.strip():
@@ -90,20 +120,28 @@ class ProtocolScorer:
                 {"role": "system", "content": _SCORER_SYSTEM},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.0,
+            "temperature": 0.1,
             "response_format": {"type": "json_schema", "json_schema": _SCORER_SCHEMA},
         }
 
         try:
-            async with httpx.AsyncClient(timeout=_s.http_timeout * 2) as client:
-                resp = await client.post(
+            if self._http_client is not None:
+                resp = await self._http_client.post(
                     f"{self._base}/chat/completions",
                     json=payload,
                     headers=self._headers,
                 )
-                if resp.is_error:
-                    logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
-                    resp.raise_for_status()
+            else:
+                async with httpx.AsyncClient(timeout=_s.http_timeout * 2) as client:
+                    resp = await client.post(
+                        f"{self._base}/chat/completions",
+                        json=payload,
+                        headers=self._headers,
+                    )
+
+            if resp.is_error:
+                logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
+                resp.raise_for_status()
             raw = resp.json()["choices"][0]["message"]["content"]
             data = json.loads(raw)
             score = float(data.get("relevance_score", protocol.relevance_score))

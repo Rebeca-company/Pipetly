@@ -31,20 +31,18 @@ Given a description of an experimental technique or research need, generate opti
 - Preserve key entities exactly when possible (targets, diseases, organisms, techniques).
 
 ## Query construction rules
-
-### concept_strings (OpenAlex, CrossRef, Semantic Scholar)
 - 2-5 terms per string; no operators and no full sentences.
 - Include synonyms and established abbreviations as separate strings.
 
 ## Output rules
-- Generate 4–8 concept_strings, varying from broad to narrow in specificity.
+- Generate 3–5 queries, varying from broad to narrow in specificity.
 - Vary synonyms and adjacent concepts across strings.
 - Do not repeat the same phrase in more than 3 queries.
 - Every term must belong to the biological domain of the user's question.
 - Prioritize specificity: a narrow query that returns 50 highly relevant papers is better than a broad query that returns 5000 mixed results.
 
 ## What NOT to include in queries
-- Do not add methodological terms (e.g., "protocol", "assay", "sequencing").
+- Do not add methodological terms (e.g., "protocol", "assay", "experiment").
 - Do not add study-type terms (e.g., "study", "analysis", "investigation", "research", "review"); these are noise, not signal.
 - Do not add generic scientific verbs (e.g., "role of", "effect of", "impact of") unless they are part of an established technical term.
 """
@@ -57,12 +55,10 @@ _EXPANDED_QUERY_SCHEMA:dict = {
         "properties": {
             "intent": {
                 "type": "string",
-                "description": "One-sentence, high-fidelity restatement of the user's request with no added assumptions.",
             },
             "concept_strings": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Clean keyword strings for OpenAlex/Crossref/Unpaywall.",
             },
         },
         "required": ["intent", "concept_strings"],

@@ -9,12 +9,11 @@ from __future__ import annotations
 import logging
 from typing import List
 
+from config import get_settings
 from models.paper import Paper
 
 logger = logging.getLogger(__name__)
-
-MIN_CHARS = 10_000
-MAX_CHARS = 200_000
+_s = get_settings()
 
 
 class FullTextFilter:
@@ -33,7 +32,7 @@ class FullTextFilter:
                 continue
 
             content_len = len(paper.full_text.content)
-            if content_len < MIN_CHARS:
+            if content_len < _s.full_text_min_chars:
                 discarded_too_short += 1
                 logger.debug(
                     "Content too short (%d chars) – discarding '%s'",
@@ -42,7 +41,7 @@ class FullTextFilter:
                 )
                 continue
 
-            if content_len > MAX_CHARS:
+            if content_len > _s.full_text_max_chars:
                 discarded_too_long += 1
                 logger.debug(
                     "Content too long (%d chars) – discarding '%s'",
@@ -58,9 +57,9 @@ class FullTextFilter:
             len(accepted),
             discarded_no_text,
             discarded_too_short,
-            MIN_CHARS,
+            _s.full_text_min_chars,
             discarded_too_long,
-            MAX_CHARS,
+            _s.full_text_max_chars,
         )
         logger.info("Step 6 complete - Post-extraction filter finished.")
         return accepted

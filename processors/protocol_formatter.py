@@ -5,12 +5,13 @@ user. Protocol step wording is drafted by the LLM; metadata is composed in code.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
 
 import httpx
 
@@ -39,10 +40,7 @@ _FORMAT_SCHEMA: dict = {
     "schema": {
         "type": "object",
         "properties": {
-            "steps_markdown": {
-                "type": "string",
-                "description": "Numbered markdown steps only.",
-            }
+            "steps_markdown": {"type": "string"}
         },
         "required": ["steps_markdown"],
         "additionalProperties": False,
@@ -53,7 +51,7 @@ _FORMAT_SCHEMA: dict = {
 class ProtocolFormatter:
     """Select top protocols and generate final user-facing markdown output."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_concurrent_drafts: int = _s.llm_max_concurrent) -> None:
         self._base = _s.openrouter_base_url.rstrip("/")
         self._headers = {
             "Authorization": f"Bearer {_s.openrouter_api_key}",
@@ -61,6 +59,8 @@ class ProtocolFormatter:
             "HTTP-Referer": "https://github.com/pipetly",
             "X-Title": "Pipetly",
         }
+        self._draft_semaphore = asyncio.Semaphore(max_concurrent_drafts)
+        self._http_client: Optional[httpx.AsyncClient] = None
 
     async def format_top_protocols(
         self,
@@ -110,7 +110,25 @@ class ProtocolFormatter:
         lines.append(f"**Generated:** {datetime.now().isoformat(timespec='seconds')}\n")
         lines.append("---\n")
 
-        for rank, sp in enumerate(top_protocols, start=1):
+        self._http_client = httpx.AsyncClient(
+            timeout=_s.http_timeout * 2,
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
+        )
+        try:
+            draft_tasks = [
+                self._draft_steps_with_semaphore(
+                    sp.protocol.protocol_text,
+                    intent,
+                    sp.protocol.inherited_references,
+                )
+                for sp in top_protocols
+            ]
+            draft_results = await asyncio.gather(*draft_tasks, return_exceptions=True)
+        finally:
+            await self._http_client.aclose()
+            self._http_client = None
+
+        for rank, (sp, draft_result) in enumerate(zip(top_protocols, draft_results), start=1):
             p = sp.protocol
             lines.append(f"## Rank {rank} — Protocol")
             lines.append(f"**Source:** {p.source_title}")
@@ -119,11 +137,16 @@ class ProtocolFormatter:
             lines.append(f"**Relevance score:** {sp.score:.1f}/100")
             lines.append(f"**Selection rationale:** {sp.reasoning}\n")
 
-            drafted_steps = await self._draft_steps_markdown(
-                p.protocol_text,
-                intent,
-                p.inherited_references,
-            )
+            if isinstance(draft_result, Exception):
+                logger.warning(
+                    "LLM step drafting failed for '%s'; using fallback: %s",
+                    p.source_title[:100],
+                    draft_result,
+                )
+                drafted_steps = "1. " + p.protocol_text.strip().replace("\n", " ")[:1000]
+            else:
+                drafted_steps = draft_result
+
             lines.append("### Protocol Steps\n")
             lines.append(drafted_steps)
             lines.append("")
@@ -151,6 +174,19 @@ class ProtocolFormatter:
         logger.info("Markdown report written to: %s", filepath)
         logger.info("Step 10 complete - Final report generated.")
         return filepath
+
+    async def _draft_steps_with_semaphore(
+        self,
+        protocol_text: str,
+        intent: str,
+        inherited_references: List[InheritedReference],
+    ) -> str:
+        async with self._draft_semaphore:
+            return await self._draft_steps_markdown(
+                protocol_text,
+                intent,
+                inherited_references,
+            )
 
     async def _draft_steps_markdown(
         self,
@@ -188,15 +224,23 @@ class ProtocolFormatter:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=_s.http_timeout * 2) as client:
-                resp = await client.post(
+            if self._http_client is not None:
+                resp = await self._http_client.post(
                     f"{self._base}/chat/completions",
                     json=payload,
                     headers=self._headers,
                 )
-                if resp.is_error:
-                    logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
-                    resp.raise_for_status()
+            else:
+                async with httpx.AsyncClient(timeout=_s.http_timeout * 2) as client:
+                    resp = await client.post(
+                        f"{self._base}/chat/completions",
+                        json=payload,
+                        headers=self._headers,
+                    )
+
+            if resp.is_error:
+                logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
+                resp.raise_for_status()
             raw = resp.json()["choices"][0]["message"]["content"]
             data = json.loads(raw)
             md = data.get("steps_markdown", "").strip()

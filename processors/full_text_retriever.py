@@ -112,12 +112,18 @@ _CLIENT_LABELS = {
 }
 
 _PMCID_RE = re.compile(r"PMC\d+", re.IGNORECASE)
+_DOI_PREFIX_RE = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:)", re.IGNORECASE)
+
+
+def _canonical_doi(doi: str) -> str:
+    normalized = _DOI_PREFIX_RE.sub("", doi.strip()).strip().lower()
+    return normalized.rstrip("/.")
 
 
 def _paper_dedup_key(paper: Paper) -> str:
     """Return a stable key for deduplicating fetch requests."""
     if paper.doi:
-        return f"doi:{paper.doi.strip().lower()}"
+        return f"doi:{_canonical_doi(paper.doi)}"
     if paper.url:
         match = _PMCID_RE.search(paper.url)
         if match:

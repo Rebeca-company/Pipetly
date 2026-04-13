@@ -161,12 +161,7 @@ async def run_pipeline(user_prompt: str) -> Path:
     # ── Step 7: Protocol Extraction ───────────────────────────────────────────
     logger.info("[Step 7] START | Protocol Extraction")
     extractor = ProtocolExtractor()
-    protocols: list[ExtractedProtocol] = []
-    for paper in filtered:
-        logger.info("Extracting from: %s", paper.title[:80])
-        proto = await extractor.extract(paper, expanded.intent)
-        if proto:
-            protocols.append(proto)
+    protocols = await extractor.extract_all(filtered, expanded.intent)
 
     logger.info("Extracted %d protocol fragments (only score=0 and empty text are discarded).", len(protocols))
     save_json(protocols, STEP7_FILE)
@@ -181,7 +176,7 @@ async def run_pipeline(user_prompt: str) -> Path:
 
     # ── Step 8: Resolve Inherited References ─────────────────────────────────
     logger.info("[Step 8] START | Solve Inherited References")
-    logger.info("Running inherited-reference resolution with Step 8 score filter (>= 60).")
+    logger.info("Running inherited-reference resolution with Step 8 score filter (>= 70).")
     resolver = ReferenceResolver(max_depth=3)
     resolved_protocols = await resolver.resolve_all(protocols)
     save_json(resolved_protocols, STEP8_FILE)
