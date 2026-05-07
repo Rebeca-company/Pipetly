@@ -1,0 +1,189 @@
+<mxfile host="Electron" modified="2026-04-14T00:00:00.000Z" agent="GitHub Copilot" version="21.0.0" type="device">
+  <diagram id="steps-7-8-detailed" name="Steps 7-8 Detailed (Code-Accurate)">
+    <mxGraphModel dx="2200" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2800" pageHeight="1800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Pipetly - Detailed Flow for Step 7 (Protocol Extraction) and Step 8 (Reference Resolution)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="20" width="1760" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend" value="Blue: processing | Green: persisted artifacts/cache | Orange: decisions/filters | Red: discarded path" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="70" width="900" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="in_step6" value="Input artifact&#xa;intermediate_outputs/step6_fulltext_filtered_papers.json&#xa;(list[Paper], plain full_text already cleaned)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="160" width="330" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s7_start" value="Step 7 start&#xa;ProtocolExtractor.extract_all(papers, user_intent)&#xa;Create AsyncClient + extraction semaphore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="450" y="150" width="360" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s7_perpaper" value="Per paper (concurrent)&#xa;1) if no full_text/content -> skip&#xa;2) call LLM with strict JSON schema&#xa;3) parse protocol_text, relevance_score, inherited_references" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="860" y="150" width="410" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s7_decision" value="Discard only when&#xa;score == 0 AND protocol_text is empty?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1320" y="175" width="220" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s7_discard" value="Discard candidate&#xa;(clear non-match)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1600" y="310" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s7_keep" value="Keep candidate and normalize inherited refs&#xa;Keep ref only if context_phrase exists&#xa;AND (target_doi OR target_title)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1600" y="140" width="330" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="out_step7" value="Output artifact&#xa;intermediate_outputs/step7_protocols.json&#xa;list[ExtractedProtocol]&#xa;(low scores can remain; only clear non-matches removed)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1990" y="145" width="350" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_start" value="Step 8 start&#xa;ReferenceResolver.resolve_all(protocols)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="440" width="300" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_filter" value="Eligibility filter&#xa;keep protocols with relevance_score &gt;= 70" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="410" y="430" width="290" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_discard" value="Discard from Step 8 processing&#xa;relevance_score &lt; 70" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="560" width="250" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_cacheload" value="Load Step 6 reuse cache (once)&#xa;Map valid plain text by canonical DOI and normalized title&#xa;(respect Step 6 length bounds)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="420" width="400" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_clients" value="Initialize shared resources&#xa;- Shared HTTP client for LLM calls&#xa;- FT clients order: Elsevier, EuropePMC, PMC, Unpaywall, SemanticScholar, OpenAlex&#xa;- Search clients order: EuropePMC, SemanticScholar, Elsevier, CrossRef, OpenAlex, Scopus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1210" y="410" width="560" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_parallel" value="Process eligible protocols in parallel&#xa;(protocol semaphore)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1820" y="430" width="300" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_queue" value="Per protocol queue initialization&#xa;queue = inherited_references at depth=1&#xa;seen set avoids duplicate/cyclic processing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="2170" y="420" width="350" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_loop" value="Loop queue item (ref, depth, context_text)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="720" width="310" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_depth_check" value="depth &gt; max_depth ?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="430" y="715" width="180" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_fetch" value="Fetch parent plain text (cached)&#xa;1) in-memory paper cache key (DOI/title)&#xa;2) Step 6 cache by DOI/title&#xa;3) if needed: title search (parallel) + deterministic title match&#xa;4) FT fetch via ordered clients + TextExtractor conversion" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="670" y="680" width="600" height="160" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_have_parent" value="Parent plain text found?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="715" width="210" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_llm" value="LLM fragment selection&#xa;Input: protocol_text + context_phrase + parent_text&#xa;Output schema: resolved_fragment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1590" y="700" width="360" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_have_fragment" value="resolved_fragment non-empty?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="2010" y="715" width="220" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_merge" value="Merge into protocol_text&#xa;Replace first context_phrase occurrence&#xa;Set ref.resolved_fragment + ref.resolution_depth" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="2280" y="700" width="340" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s8_note" value="Note: nested reference expansion is currently disabled in code&#xa;(queue grows only from original inherited_references)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="2280" y="860" width="340" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="out_step8" value="Output artifact&#xa;intermediate_outputs/step8_resolved_protocols.json&#xa;list[ExtractedProtocol] with resolved fragments merged" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="2280" y="1020" width="390" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="in_step6" target="s7_start" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s7_start" target="s7_perpaper" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s7_perpaper" target="s7_decision" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s7_decision" target="s7_discard" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s7_decision" target="s7_keep" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s7_keep" target="out_step7" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e7" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="out_step7" target="s8_start" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2165" y="330" />
+              <mxPoint x="210" y="330" />
+              <mxPoint x="210" y="440" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_start" target="s8_filter" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" value="&lt; 70" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_filter" target="s8_discard" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" value="&gt;= 70" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_filter" target="s8_cacheload" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_cacheload" target="s8_clients" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_clients" target="s8_parallel" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_parallel" target="s8_queue" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e14" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_queue" target="s8_loop" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2345" y="660" />
+              <mxPoint x="215" y="660" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_loop" target="s8_depth_check" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_depth_check" target="s8_fetch" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" value="Yes (skip)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_depth_check" target="s8_loop" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="860" />
+              <mxPoint x="215" y="860" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_fetch" target="s8_have_parent" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e19" value="No (continue)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_have_parent" target="s8_loop" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1435" y="870" />
+              <mxPoint x="215" y="870" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e20" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_have_parent" target="s8_llm" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e21" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_llm" target="s8_have_fragment" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e22" value="No (continue)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_have_fragment" target="s8_loop" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2120" y="900" />
+              <mxPoint x="215" y="900" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e23" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_have_fragment" target="s8_merge" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e24" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_merge" target="s8_note" parent="1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e25" value="Next ref until queue empty" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_note" target="s8_loop" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2450" y="970" />
+              <mxPoint x="215" y="970" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e26" value="All eligible protocols processed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;" edge="1" source="s8_parallel" target="out_step8" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1970" y="1140" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

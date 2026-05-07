@@ -21,7 +21,7 @@ User prompt
 ┌─────────────────────────────┐
 │  2. Multi-Source Fetch      │  Concurrent async calls to:
 │     (processors/            │   • Europe PMC   • Semantic Scholar
-│      orchestrator.py)       │   • Elsevier     • CrossRef
+│      paper_searcher.py)     │   • Elsevier     • CrossRef
 │                             │   • OpenAlex     • Scopus
 └────────────┬────────────────┘
              │
@@ -51,6 +51,30 @@ User prompt
 │  6. Full-Text Length Filter │  Keeps papers in configured char-range
 │     (processors/            │  (default: 10,000 to 200,000 chars)
 │      full_text_filter.py)   │
+└────────────┬────────────────┘
+             │
+             ▼
+┌─────────────────────────────┐
+│  7. Recursive Protocol      │  7.1 protocol interval extraction (LLM)
+│     Extraction              │  7.2 inherited-reference detection (LLM)
+│     (processors/            │  7.3 reference metadata + inherited full-text retrieval
+│      protocol_extractor.py) │      (normalised to plain text + Step 6 length gating)
+│                             │  7.4 recursive extraction over inherited protocols
+└────────────┬────────────────┘
+             │
+             ▼
+┌─────────────────────────────┐
+│  8. Protocol Scoring        │  Re-scores protocols using only recursion levels
+│     (processors/            │  0 and 1 inside each protocol tree
+│      protocol_scorer.py)    │
+└────────────┬────────────────┘
+             │
+             ▼
+┌─────────────────────────────┐
+│  9. Final Formatting        │  Integrates resolved inherited fragments into source
+│     & Output                │  protocol text with citations ([DOI:...] or [REF:...])
+│     (processors/            │  and drafts final numbered steps (LLM)
+│      protocol_formatter.py) │
 └─────────────────────────────┘
 ```
 
@@ -87,10 +111,9 @@ Pipetly/
 │   ├── full_text_retriever.py→ Stage 4
 │   ├── text_extractor.py     → Stage 5
 │   ├── full_text_filter.py   → Stage 6
-│   ├── protocol_extractor.py → Stage 7
-│   ├── solve_references.py   → Stage 8
-│   ├── protocol_scorer.py    → Stage 9
-│   └── protocol_formatter.py → Stage 10
+│   ├── protocol_extractor.py → Stage 7 (recursive 7.1-7.4)
+│   ├── protocol_scorer.py    → Stage 8
+│   └── protocol_formatter.py → Stage 9
 │
 └── utils/
     ├── rate_limiter.py       → Async token-bucket rate limiter
@@ -138,16 +161,19 @@ All configuration lives in `.env` (never committed to git):
 | `OPENROUTER_API_KEY` | ✅ | Your key from [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `ELSEVIER_API_KEY` | ⬜ | [Elsevier Dev Portal](https://dev.elsevier.com/) – enables ScienceDirect full-text |
 | `SEMANTIC_SCHOLAR_API_KEY` | ⬜ | [S2 API](https://www.semanticscholar.org/product/api) – higher rate limits |
+| `UNPAYWALL_EMAIL` | ⬜ | Contact e-mail used by Unpaywall API |
+| `NCBI_API_KEY` | ⬜ | Optional NCBI key for higher throughput where applicable |
 
 Optional pipeline tunables (add to `.env` to override defaults):
 
 | Variable | Default | Description |
 |---|---|---|
 | `MAX_PAPERS_PER_SOURCE` | `3` | Results fetched per API per query |
-| `MAX_CITATION_DEPTH` | `3` | Max recursive citation-resolution depth |
-| `TOP_K_PROTOCOLS` | `3` | Number of protocols to score and include in the report |
+| `MAX_CITATION_DEPTH` | `2` | Max recursive citation-investigator depth |
+| `TOP_K_PROTOCOLS` | `5` | Number of protocols to include in the final report |
 | `HTTP_TIMEOUT` | `30.0` | Per-request timeout in seconds |
 | `HTTP_MAX_RETRIES` | `4` | Max retries on rate-limit / connection errors |
+| `LLM_MAX_CONCURRENT` | `20` | Shared max concurrent LLM calls across pipeline components |
 
 ---
 
@@ -180,14 +206,33 @@ The report is written to `output/protocols_<timestamp>.md`.
 **Source:** Efficient genome editing in human cells using CRISPR-Cas9
 **DOI:** [10.1016/j.cell.2013.12.010](https://doi.org/10.1016/j.cell.2013.12.010)
 **Relevance score:** 94.0/100
-...
 
 ### Protocol Steps
 
-**Step 1.** Design sgRNA targeting the gene of interest using an online tool (e.g. Benchling).
-- *Reagents:* sgRNA oligos, T4 PNK buffer
-...
+1. Design sgRNA targeting the gene of interest.
+2. Assemble expression constructs and validate sequence.
+3. Transfect cells and apply selection conditions.
+4. Screen edited clones and confirm the target modification [DOI:10.1016/j.cell.2013.12.010].
+
+### Inherited References
+
+- **Context:** ... as described in prior work
+    **Target DOI:** [10.xxxx/xxxxx](https://doi.org/10.xxxx/xxxxx)
 ```
+
+---
+
+## Intermediate outputs
+
+- `intermediate_outputs/step1_expanded_query.json`
+- `intermediate_outputs/step2_raw_papers.json`
+- `intermediate_outputs/step3_doi_filtered_papers.json`
+- `intermediate_outputs/step4_fulltext_raw_papers.json`
+- `intermediate_outputs/step5_fulltext_clean_papers.json`
+- `intermediate_outputs/step6_fulltext_filtered_papers.json`
+- `intermediate_outputs/step7_protocols.json`
+- `intermediate_outputs/step8_scored_protocols.json`
+- `intermediate_outputs/test_llm_token_usage.json` (testing telemetry)
 
 ---
 
@@ -197,6 +242,10 @@ The report is written to `output/protocols_<timestamp>.md`.
 - **Async throughout** — `httpx.AsyncClient` + `asyncio.gather` for concurrent multi-source fan-out.
 - **Rate limiting** — each API client has its own `RateLimiter` (token-bucket); 429 responses trigger exponential backoff.
 - **Staged full-text normalization** — Step 4 fetches raw payloads, Step 5 converts to clean plain text, and Step 6 applies length-based quality gating.
+- **Recursive protocol reasoning** — Step 7 resolves inherited protocol references recursively (up to configured depth).
+- **Controlled scoring context** — Step 8 scores only recursion levels 0 and 1 within each protocol tree.
+- **Evidence-preserving formatting** — Step 9 integrates resolved inherited fragments with explicit citations before LLM step drafting.
+- **Token/cost observability** — pipeline emits LLM token telemetry for extractor, scorer, and formatter into `test_llm_token_usage.json`.
 - **Graceful degradation** — missing API keys silently skip that source; network errors are logged and the pipeline continues.
 
 ---

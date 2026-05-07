@@ -51,10 +51,10 @@ class Settings(BaseSettings):
 
     # ── Pipeline ─────────────────────────────────────────────────────────────
     max_papers_per_source: int = 3      # fetch limit per API
-    max_citation_depth: int = 1        # recursive citation-investigator depth
+    max_citation_depth: int = 2        # recursive citation-investigator depth
     full_text_min_chars: int = 10_000   # accepted minimum full-text length
     full_text_max_chars: int = 200_000  # accepted maximum full-text length
-    top_k_protocols: int = 3            # how many to score/return
+    top_k_protocols: int = 5            # how many to score/return
     llm_max_concurrent: int = 20        # shared LLM concurrency for Steps 7, 9 and 10
 
     # ── Output ────────────────────────────────────────────────────────────────

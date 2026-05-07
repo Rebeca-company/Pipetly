@@ -16,9 +16,8 @@ Pipeline overview
 5. Text Extraction         – convert to clean plain text; abstract fallback.
 6. Post-Extraction Filter  – keep only papers with full text length in accepted range.
 7. Protocol Extraction     – LLM extraction of protocol fragments + inherited refs.
-8. Solve References        – iterative inherited-reference resolution (max depth 3).
-9. Protocol Scoring        – re-score resolved protocols with score > 60.
-10. Final Formatting & Output – package Top 3 protocols and write Markdown report.
+8. Protocol Scoring        – re-score extracted protocols with score > 60.
+9. Final Formatting & Output – package Top 3 protocols and write Markdown report.
 """
 from __future__ import annotations
 
@@ -36,7 +35,6 @@ from processors import (
     PaperSearcher,
     ProtocolExtractor,
     ProtocolScorer,
-    ReferenceResolver,
     ProtocolFormatter,
     QueryExpander,
     TextExtractor,
@@ -50,7 +48,7 @@ from utils.intermediate_io import (
     STEP6_FILE,
     STEP7_FILE,
     STEP8_FILE,
-    STEP9_FILE,
+    TEST_LLM_TOKEN_USAGE_FILE,
     save_json,
 )
 
@@ -158,10 +156,11 @@ async def run_pipeline(user_prompt: str) -> Path:
         logger.warning("No papers passed the filter. Try a broader query.")
         raise RuntimeError("No eligible papers found. Adjust your query or API keys.")
 
-    # ── Step 7: Protocol Extraction ───────────────────────────────────────────
-    logger.info("[Step 7] START | Protocol Extraction")
-    extractor = ProtocolExtractor()
+    # ── Step 7: Recursive Protocol Extraction (7.1-7.4) ──────────────────────
+    logger.info("[Step 7] START | Recursive Protocol Extraction")
+    extractor = ProtocolExtractor(max_depth=3)
     protocols = await extractor.extract_all(filtered, expanded.intent)
+    step7_token_events = extractor.get_llm_token_events()
 
     logger.info("Extracted %d protocol fragments (only score=0 and empty text are discarded).", len(protocols))
     save_json(protocols, STEP7_FILE)
@@ -174,34 +173,22 @@ async def run_pipeline(user_prompt: str) -> Path:
     if not protocols:
         raise RuntimeError("No protocols could be extracted from the filtered papers.")
 
-    # ── Step 8: Resolve Inherited References ─────────────────────────────────
-    logger.info("[Step 8] START | Solve Inherited References")
-    logger.info("Running inherited-reference resolution with Step 8 score filter (>= 70).")
-    resolver = ReferenceResolver(max_depth=3)
-    resolved_protocols = await resolver.resolve_all(protocols)
-    save_json(resolved_protocols, STEP8_FILE)
+    # ── Step 8: Protocol Scoring ─────────────────────────────────────────────
+    logger.info("[Step 8] START | Protocol Scoring")
+    scorer = ProtocolScorer()
+    rescored_protocols = await scorer.score_all(protocols, expanded.intent)
+    step8_token_events = scorer.get_llm_token_events()
+    save_json(rescored_protocols, STEP8_FILE)
+    logger.info("Re-scored %d protocols from Step 7.", len(rescored_protocols))
     logger.info(
         "[Step 8] DONE | input=%d output=%d | Output: intermediate_outputs/%s",
         len(protocols),
-        len(resolved_protocols),
+        len(rescored_protocols),
         STEP8_FILE,
     )
 
-    # ── Step 9: Protocol Scoring (post-resolution) ───────────────────────────
-    logger.info("[Step 9] START | Protocol Scoring")
-    scorer = ProtocolScorer()
-    rescored_protocols = await scorer.score_all(resolved_protocols, expanded.intent)
-    save_json(rescored_protocols, STEP9_FILE)
-    logger.info("Re-scored %d protocols from Step 8.", len(rescored_protocols))
-    logger.info(
-        "[Step 9] DONE | input=%d output=%d | Output: intermediate_outputs/%s",
-        len(resolved_protocols),
-        len(rescored_protocols),
-        STEP9_FILE,
-    )
-
-    # ── Step 10: Final Formatting & Output ───────────────────────────────────
-    logger.info("[Step 10] START | Final Formatting and Output")
+    # ── Step 9: Final Formatting & Output ────────────────────────────────────
+    logger.info("[Step 9] START | Final Formatting and Output")
     formatter = ProtocolFormatter()
     top_protocols = await formatter.format_top_protocols(rescored_protocols, expanded.intent)
     logger.info("Top %d protocols selected.", len(top_protocols))
@@ -213,8 +200,72 @@ async def run_pipeline(user_prompt: str) -> Path:
         expanded.intent,
         _s.output_dir,
     )
+    step9_token_events = formatter.get_llm_token_events()
+
+    # Gemini 3 Flash Preview pricing provided by user:
+    # input: $0.50 / 1M tokens, output: $3.00 / 1M tokens.
+    input_usd_per_million_tokens = 0.50
+    output_usd_per_million_tokens = 3.00
+
+    raw_token_events = [
+        *[
+            {"component": "protocol_extractor", **event}
+            for event in step7_token_events
+        ],
+        *[
+            {"component": "protocol_scorer", **event}
+            for event in step8_token_events
+        ],
+        *[
+            {"component": "protocol_formatter", **event}
+            for event in step9_token_events
+        ],
+    ]
+
+    token_events = []
+    for event in raw_token_events:
+        input_tokens = int(event.get("input_tokens", 0))
+        output_tokens = int(event.get("output_tokens", 0))
+        input_cost_usd = (input_tokens / 1_000_000) * input_usd_per_million_tokens
+        output_cost_usd = (output_tokens / 1_000_000) * output_usd_per_million_tokens
+        token_events.append(
+            {
+                **event,
+                "input_cost_usd": round(input_cost_usd, 8),
+                "output_cost_usd": round(output_cost_usd, 8),
+                "total_cost_usd": round(input_cost_usd + output_cost_usd, 8),
+            }
+        )
+
+    total_input_tokens = sum(int(item.get("input_tokens", 0)) for item in token_events)
+    total_output_tokens = sum(int(item.get("output_tokens", 0)) for item in token_events)
+    total_input_cost_usd = (total_input_tokens / 1_000_000) * input_usd_per_million_tokens
+    total_output_cost_usd = (total_output_tokens / 1_000_000) * output_usd_per_million_tokens
+
+    token_report = {
+        "description": "Testing-only LLM token telemetry by call and step.",
+        "pricing_model": "Google: Gemini 3 Flash Preview",
+        "input_usd_per_million_tokens": input_usd_per_million_tokens,
+        "output_usd_per_million_tokens": output_usd_per_million_tokens,
+        "total_calls": len(token_events),
+        "total_input_tokens": total_input_tokens,
+        "total_output_tokens": total_output_tokens,
+        "total_tokens": sum(int(item.get("total_tokens", 0)) for item in token_events),
+        "total_input_cost_usd": round(total_input_cost_usd, 8),
+        "total_output_cost_usd": round(total_output_cost_usd, 8),
+        "total_cost_usd": round(total_input_cost_usd + total_output_cost_usd, 8),
+        "calls": token_events,
+    }
+    save_json(token_report, TEST_LLM_TOKEN_USAGE_FILE)
     logger.info(
-        "[Step 10] DONE | candidates=%d top_k=%d | Output: %s",
+        "[Testing] Token telemetry saved | calls=%d total_tokens=%d | Output: intermediate_outputs/%s",
+        token_report["total_calls"],
+        token_report["total_tokens"],
+        TEST_LLM_TOKEN_USAGE_FILE,
+    )
+
+    logger.info(
+        "[Step 9] DONE | candidates=%d top_k=%d | Output: %s",
         len(rescored_protocols),
         len(top_protocols),
         output_path,

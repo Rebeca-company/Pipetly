@@ -20,12 +20,16 @@ class ProtocolStep(BaseModel):
 class InheritedReference(BaseModel):
     """Reference to an inherited protocol detail from an ancestor paper."""
 
+    search_intent: Optional[str] = None
+    reference_text: Optional[str] = None
     context_phrase: str
     target_doi: Optional[str] = None
     target_title: Optional[str] = None
     target_year: Optional[int] = None
     resolved_fragment: Optional[str] = None
     resolution_depth: Optional[int] = None
+    # Monitoring field: where inherited full text came from.
+    full_text_found_by: Optional[str] = None
 
 
 class ExtractedProtocol(BaseModel):
@@ -36,7 +40,11 @@ class ExtractedProtocol(BaseModel):
     protocol_text: str = ""
     # Score from 0 to 100 aligned with user intent
     relevance_score: float = Field(default=0.0, ge=0.0, le=100.0)
+    # Monitoring field: short LLM rationale for Step 8 score.
+    scoring_justification: Optional[str] = None
     inherited_references: List[InheritedReference] = Field(default_factory=list)
+    recursion_depth: int = Field(default=0, ge=0)
+    nested_protocols: List["ExtractedProtocol"] = Field(default_factory=list)
 
     unresolved_citations: List[str] = Field(default_factory=list)
 
@@ -46,4 +54,6 @@ class ScoredProtocol(BaseModel):
 
     protocol: ExtractedProtocol
     score: float = Field(..., ge=0.0, le=100.0)
-    reasoning: str
+
+
+ExtractedProtocol.model_rebuild()

@@ -14,8 +14,8 @@ Directory layout::
             step5_fulltext_clean_papers.json
             step6_fulltext_filtered_papers.json
             step7_protocols.json
-            step8_resolved_protocols.json
-            step9_scored_protocols.json
+            step8_scored_protocols.json
+            test_llm_token_usage.json
 
 Usage example (saving)::
 
@@ -54,9 +54,9 @@ STEP3_FILE = "step3_doi_filtered_papers.json"   # MetadataFilter – dedup + DOI
 STEP4_FILE = "step4_fulltext_raw_papers.json"   # FullTextRetriever – raw PDF/XML/HTML
 STEP5_FILE = "step5_fulltext_clean_papers.json" # TextExtractor  – clean plain text
 STEP6_FILE = "step6_fulltext_filtered_papers.json" # FullTextFilter – accepted length range
-STEP7_FILE = "step7_protocols.json"             # ProtocolExtractor output
-STEP8_FILE = "step8_resolved_protocols.json"    # SolveReferences output
-STEP9_FILE = "step9_scored_protocols.json"      # ProtocolScorer output
+STEP7_FILE = "step7_protocols.json"             # Step 7 protocol extraction output
+STEP8_FILE = "step8_scored_protocols.json"      # ProtocolScorer output
+TEST_LLM_TOKEN_USAGE_FILE = "test_llm_token_usage.json"  # Testing telemetry for LLM token usage
 
 
 # ---------------------------------------------------------------------------

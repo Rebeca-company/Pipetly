@@ -21,17 +21,20 @@ from models.protocol import ExtractedProtocol, InheritedReference, ScoredProtoco
 logger = logging.getLogger(__name__)
 _s = get_settings()
 
-_FORMAT_SYSTEM = """You are a scientific writing assistant.
-Transform protocol source text into concise, executable protocol steps.
+_FORMAT_SYSTEM = """You are an expert scientific writer and protocol editor.
+Your task is to transform dense, narrative scientific methodology text into a clear, chronological, and highly actionable numbered protocol.
 
-Rules:
-- Output in Markdown.
-- Provide only a numbered list of steps (1., 2., 3., ...).
-- Keep technical details (conditions, concentrations, temperatures, timings).
-- Do not add inferred steps that are not in source text.
-- Add inherited references as inline citations only where needed in the relevant step.
-- Use inline format exactly: [DOI:10.xxxx/xxxxx]
-- Do not invent citations or place citations in unrelated steps.
+You will receive:
+1. The user's research intent.
+2. The [Level 0] Primary Protocol text.
+3. [Level N] Supplementary Protocol texts (if any). These are nested references where N indicates the depth of recursion (e.g., [Level 1] provides details missing in [Level 0]; [Level 2] provides details missing in [Level 1]).
+
+Rules for Drafting the Output:
+- Output strictly in Markdown format as a single numbered list (1., 2., 3., ...).
+- **Resolve the Chain:** Follow the "Trigger Context" breadcrumbs. If [Level 0] cites a method detailed in [Level 1], and [Level 1] cites a specific buffer preparation detailed in [Level 2], you MUST unpack this chain and integrate all steps chronologically into the main flow.
+- **Precision:** Retain all exact technical details (concentrations, volumes, times, temperatures, equipment).
+- **No Hallucination:** Do not invent steps.
+- **Citations:** Add inline citations for supplementarry protocols using [{doi}](https://doi.org/{doi})]. Place the citation at the end of the specific step it relates to.
 """
 
 _FORMAT_SCHEMA: dict = {
@@ -61,26 +64,25 @@ class ProtocolFormatter:
         }
         self._draft_semaphore = asyncio.Semaphore(max_concurrent_drafts)
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._llm_token_events: list[dict[str, int | str]] = []
+        self._llm_call_count = 0
+
+    def get_llm_token_events(self) -> list[dict[str, int | str]]:
+        """Return per-call token telemetry records for Step 9 formatting."""
+        return list(self._llm_token_events)
 
     async def format_top_protocols(
         self,
         protocols: List[ExtractedProtocol],
-        intent: str,
     ) -> List[ScoredProtocol]:
         """Return Top-K protocols ordered by relevance_score."""
         packaged: list[ScoredProtocol] = []
         for protocol in protocols:
             score = float(protocol.relevance_score)
-            reason = (
-                f"Selected by extractor relevance_score against intent: '{intent[:120]}'. "
-                f"Resolved refs: {sum(1 for r in protocol.inherited_references if r.resolved_fragment)}"
-                f"/{len(protocol.inherited_references)}."
-            )
             packaged.append(
                 ScoredProtocol(
                     protocol=protocol,
                     score=score,
-                    reasoning=reason,
                 )
             )
 
@@ -96,8 +98,10 @@ class ProtocolFormatter:
         output_dir: str | None = None,
     ) -> Path:
         """Select top protocols, draft steps with LLM, and write markdown report."""
-        logger.info("Step 10 start - Final formatting on %d protocols.", len(protocols))
-        top_protocols = await self.format_top_protocols(protocols, intent)
+        logger.info("Step 9 start - Final formatting on %d protocols.", len(protocols))
+        self._llm_token_events.clear()
+        self._llm_call_count = 0
+        top_protocols = await self.format_top_protocols(protocols)
 
         out_dir = output_dir or _s.output_dir
         os.makedirs(out_dir, exist_ok=True)
@@ -105,7 +109,7 @@ class ProtocolFormatter:
         filepath = Path(out_dir) / f"protocols_{timestamp}.md"
 
         lines: list[str] = []
-        lines.append("# Pipetly — Extracted Biomedical Protocols\n")
+        lines.append("# Pipetly — Extracted Protocols\n")
         lines.append(f"**Search intent:** {intent}\n")
         lines.append(f"**Generated:** {datetime.now().isoformat(timespec='seconds')}\n")
         lines.append("---\n")
@@ -114,6 +118,7 @@ class ProtocolFormatter:
             timeout=_s.http_timeout * 2,
             limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
         )
+
         try:
             draft_tasks = [
                 self._draft_steps_with_semaphore(
@@ -133,9 +138,9 @@ class ProtocolFormatter:
             lines.append(f"## Rank {rank} — Protocol")
             lines.append(f"**Source:** {p.source_title}")
             if p.source_doi:
-                lines.append(f"**DOI:** [{p.source_doi}](https://doi.org/{p.source_doi})")
-            lines.append(f"**Relevance score:** {sp.score:.1f}/100")
-            lines.append(f"**Selection rationale:** {sp.reasoning}\n")
+                lines.append(f"\n**DOI:** [{p.source_doi}](https://doi.org/{p.source_doi})")
+            lines.append(f"\n**Relevance score:** {sp.score:.1f}/100")
+            lines.append("")
 
             if isinstance(draft_result, Exception):
                 logger.warning(
@@ -151,28 +156,31 @@ class ProtocolFormatter:
             lines.append(drafted_steps)
             lines.append("")
 
-            lines.append("### Inherited References\n")
-            refs = []
-            seen = set()
-            for ref in p.inherited_references:
-                doi = (ref.target_doi or "").strip()
-                ctx = (ref.context_phrase or "").strip()
-                key = (ctx.lower(), doi.lower())
-                if doi and key not in seen:
-                    seen.add(key)
-                    refs.append((ctx, doi))
-            if not refs:
-                lines.append("- None")
-            else:
-                for ctx, doi in refs:
-                    lines.append(f"- **Context:** {ctx}")
-                    lines.append(f"  **Target DOI:** [{doi}](https://doi.org/{doi})")
-            lines.append("")
-            lines.append("---\n")
+            if p.inherited_references:
+                lines.append("### Inherited References\n")
+                lines.append("\nThese are references cited by this protocol that were resolved.")
+                refs = []
+                seen = set()
+                for ref in p.inherited_references:
+                    doi = (ref.target_doi or "").strip()
+                    intent = (ref.search_intent or "").strip()
+                    ctx = (ref.context_phrase or "").strip()
+                    key = (ctx.lower(), doi.lower())
+                    if doi and key not in seen:
+                        seen.add(key)
+                        refs.append((ctx, doi))
+                if not refs:
+                    lines.append("- None")
+                else:
+                    for ctx, doi in refs:
+                        lines.append(f"- **{intent}**")
+                        lines.append(f"\n  Extracted from: [{doi}](https://doi.org/{doi})")
+                lines.append("")
+                lines.append("---\n")
 
         filepath.write_text("\n".join(lines), encoding="utf-8")
         logger.info("Markdown report written to: %s", filepath)
-        logger.info("Step 10 complete - Final report generated.")
+        logger.info("Step 9 complete - Final report generated.")
         return filepath
 
     async def _draft_steps_with_semaphore(
@@ -188,6 +196,15 @@ class ProtocolFormatter:
                 inherited_references,
             )
 
+    def _reference_citation(self, ref: InheritedReference) -> str:
+        doi = (ref.target_doi or "").strip()
+        if doi:
+            return f"[DOI:{doi}]"
+
+        title = (ref.target_title or ref.reference_text or "unknown reference").strip()
+        year = f" ({ref.target_year})" if ref.target_year is not None else ""
+        return f"[REF:{title}{year}]"
+
     async def _draft_steps_markdown(
         self,
         protocol_text: str,
@@ -198,20 +215,32 @@ class ProtocolFormatter:
         if not protocol_text.strip():
             return "1. (No protocol steps available)"
 
-        ref_lines = []
+        nested_blocks: list[str] = []
         for ref in inherited_references:
-            doi = (ref.target_doi or "").strip()
             context = (ref.context_phrase or "").strip()
-            if doi:
-                ref_lines.append(f"- DOI: {doi} | Context: {context}")
-        refs_block = "\n".join(ref_lines) if ref_lines else "- None"
+            resolved = (ref.resolved_fragment or "").strip()
+            if not resolved:
+                continue
 
+            citation = self._reference_citation(ref)
+            depth = getattr(ref, "resolution_depth", 1) or 1
+            
+            block = (
+                f"### [Level {depth}] Supplementary Protocol\n"
+                f"**Citation:** {citation}\n"
+                f"**Trigger Context (Look for this phrase in Level {depth - 1}):** \"{context}\"\n"
+                f"**Protocol Text:**\n{resolved}\n"
+            )
+            
+            nested_blocks.append(block)
+
+        nested_protocols_str = "\n\n".join(nested_blocks) if nested_blocks else "No supplementary nested protocols provided."
         user_prompt = (
             f"Research intent:\n{intent}\n\n"
             "Protocol source text:\n"
-            f"{protocol_text[:120_000]}\n\n"
-            "Inherited references (use only if relevant to a step):\n"
-            f"{refs_block}"
+            f"{protocol_text}\n\n"
+            "Inherited resolved fragments to integrate into steps (only when relevant):\n"
+            f"{nested_protocols_str}"
         )
         payload: dict[str, Any] = {
             "model": _s.gemini_model_general,
@@ -219,7 +248,7 @@ class ProtocolFormatter:
                 {"role": "system", "content": _FORMAT_SYSTEM},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.1,
+            "temperature": 0.0,
             "response_format": {"type": "json_schema", "json_schema": _FORMAT_SCHEMA},
         }
 
@@ -241,7 +270,9 @@ class ProtocolFormatter:
             if resp.is_error:
                 logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
                 resp.raise_for_status()
-            raw = resp.json()["choices"][0]["message"]["content"]
+            raw_payload = resp.json()
+            self._record_llm_usage(raw_payload)
+            raw = raw_payload["choices"][0]["message"]["content"]
             data = json.loads(raw)
             md = data.get("steps_markdown", "").strip()
             return md or "1. (No protocol steps available)"
@@ -249,6 +280,41 @@ class ProtocolFormatter:
             logger.warning("LLM step drafting failed; using fallback: %s", exc)
             # Safe fallback to avoid empty output when LLM fails.
             return "1. " + protocol_text.strip().replace("\n", " ")[:1000]
+
+    def _record_llm_usage(self, response_json: dict[str, Any]) -> None:
+        usage = response_json.get("usage") or {}
+
+        in_tokens = int(
+            usage.get("prompt_tokens")
+            or usage.get("input_tokens")
+            or usage.get("promptTokens")
+            or 0
+        )
+        out_tokens = int(
+            usage.get("completion_tokens")
+            or usage.get("output_tokens")
+            or usage.get("completionTokens")
+            or 0
+        )
+        total_tokens = int(usage.get("total_tokens") or (in_tokens + out_tokens))
+
+        self._llm_call_count += 1
+        event: dict[str, int | str] = {
+            "step": "9",
+            "call_index": self._llm_call_count,
+            "input_tokens": in_tokens,
+            "output_tokens": out_tokens,
+            "total_tokens": total_tokens,
+        }
+        self._llm_token_events.append(event)
+
+        logger.info(
+            "LLM step 9 tokens (call %d) - in=%d out=%d total=%d",
+            self._llm_call_count,
+            in_tokens,
+            out_tokens,
+            total_tokens,
+        )
 
 
 if __name__ == "__main__":
@@ -263,22 +329,22 @@ if __name__ == "__main__":
     from models.query import ExpandedQuery
     from utils.intermediate_io import (
         STEP1_FILE,
-        STEP9_FILE,
+        STEP8_FILE,
         load_model,
         load_model_list,
     )
 
     async def _main() -> None:
-        print("[Step 10] START | Final Formatting and Output")
+        print("[Step 9] START | Final Formatting and Output")
         intent = load_model(STEP1_FILE, ExpandedQuery).intent
-        protocols = load_model_list(STEP9_FILE, ExtractedProtocol)
+        protocols = load_model_list(STEP8_FILE, ExtractedProtocol)
         formatter = ProtocolFormatter()
-        top = await formatter.format_top_protocols(protocols, intent)
+        top = await formatter.format_top_protocols(protocols)
         for item in top:
             print(f"  [{item.score:.1f}] {item.protocol.source_title[:70]}")
         md_path = await formatter.format_and_write(protocols, intent)
         print(
-            f"[Step 10] DONE | candidates={len(protocols)} top_k={len(top)} | Output: {md_path}"
+            f"[Step 9] DONE | candidates={len(protocols)} top_k={len(top)} | Output: {md_path}"
         )
 
     asyncio.run(_main())

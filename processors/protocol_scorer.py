@@ -1,6 +1,6 @@
-"""Re-score resolved protocols before final formatting.
+"""Re-score extracted protocols before final formatting.
 
-Reads protocols after inherited-reference resolution and updates their
+Reads protocols after recursive extraction and updates their
 ``relevance_score`` using an LLM pass focused on protocol executability,
 completeness, and alignment with user intent.
 """
@@ -22,13 +22,24 @@ _s = get_settings()
 _SCORER_SYSTEM = """You are a biomedical protocol evaluator.
 Given the user intent and a resolved protocol text, assign a relevance score from 0 to 100.
 
-Scoring criteria:
-- Intent alignment (does it solve what the user asked? meet the research topic or technique of interest?)
-- Operational completeness (materials, conditions, timings, and steps)
+## Your task
+- Read the user intent and the resolved protocol text.
+1. Read the user intent.
+2. Read the combined protocol text, treating [Level 0] as the core focus and [Level 1] as supplementary technical support.
+3. Assess how well the *synthesized* information (Level 0 + Level 1) meets the user's needs and how complete it is for practical, bench-side execution.
+4. Assign a final relevance score from 0 to 100 based on the scoring ccriteria.
+5. Provide a brief scoring justification (max 30 words) explaining the main reason for the assigned score.
 
-Rules:
-- Be strict and evidence-based.
-- Do not reward generic or incomplete protocols.
+## Scoring criteria
+- Intent Alignment (Weight: 60%): Does the primary protocol ([Level 0]) directly address the user's specific technique, biological target, or research intent? 
+- Operational Completeness (Weight: 40%): Can a researcher practically execute this? Evaluate the presence of actionable steps, materials, concentrations, timings, and conditions. 
+  * IMPORTANT: If [Level 0] lacks detail, check if [Level 1] successfully provides the missing steps. 
+  * Penalize the score if crucial steps are still missing across all levels.
+
+## Input
+The input text you will evaluate contains a main protocol and its supporting nested protocols, labeled by their hierarchical relationship:
+- [Level 0]: The primary protocol extracted from the main source document.
+- [Level 1]: Nested or cited protocols (e.g., extracted because [Level 0] referenced them via phrases like "prepared as described previously"). These provide the missing operational details for [Level 0].
 """
 
 _SCORER_SCHEMA: dict = {
@@ -37,16 +48,17 @@ _SCORER_SCHEMA: dict = {
     "schema": {
         "type": "object",
         "properties": {
-            "relevance_score": {"type": "number"}
+            "relevance_score": {"type": "number"},
+            "scoring_justification": {"type": "string"}
         },
-        "required": ["relevance_score"],
+        "required": ["relevance_score", "scoring_justification"],
         "additionalProperties": False,
     },
 }
 
 
 class ProtocolScorer:
-    """Re-score protocols after inherited-reference resolution."""
+    """Re-score protocols after recursive extraction."""
 
     def __init__(self, max_concurrent_scores: int = _s.llm_max_concurrent) -> None:
         self._base = _s.openrouter_base_url.rstrip("/")
@@ -58,6 +70,12 @@ class ProtocolScorer:
         }
         self._score_semaphore = asyncio.Semaphore(max_concurrent_scores)
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._llm_token_events: list[dict[str, int | str]] = []
+        self._llm_call_count = 0
+
+    def get_llm_token_events(self) -> list[dict[str, int | str]]:
+        """Return per-call token telemetry records for Step 8 scoring."""
+        return list(self._llm_token_events)
 
     async def score_all(
         self,
@@ -65,7 +83,12 @@ class ProtocolScorer:
         user_intent: str,
     ) -> list[ExtractedProtocol]:
         """Re-score all input protocols and return the updated list."""
-        logger.info("Step 9 start - Re-scoring %d protocols.", len(protocols))
+        logger.info(
+            "Step 8 start - Re-scoring %d protocols (reading recursion levels 0-1 inside each protocol).",
+            len(protocols),
+        )
+        self._llm_token_events.clear()
+        self._llm_call_count = 0
         self._http_client = httpx.AsyncClient(
             timeout=_s.http_timeout * 2,
             limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
@@ -93,7 +116,7 @@ class ProtocolScorer:
                 continue
             rescored.append(result)
 
-        logger.info("Step 9 complete - Re-scored %d protocols.", len(rescored))
+        logger.info("Step 8 complete - Re-scored %d protocols.", len(rescored))
         return rescored
 
     async def _score_one_with_semaphore(
@@ -105,14 +128,16 @@ class ProtocolScorer:
             return await self._score_one(protocol, user_intent)
 
     async def _score_one(self, protocol: ExtractedProtocol, user_intent: str) -> ExtractedProtocol:
-        if not protocol.protocol_text.strip():
+        scoring_text = self._build_scoring_text(protocol)
+        if not scoring_text:
             protocol.relevance_score = 0.0
+            protocol.scoring_justification = "No protocol content at levels 0-1 available for LLM scoring."
             return protocol
 
         user_prompt = (
             f"User intent:\n{user_intent}\n\n"
-            "Resolved protocol text:\n"
-            f"{protocol.protocol_text[:120_000]}"
+            "Resolved protocol text (levels 0 and 1 only):\n"
+            f"{scoring_text[:120_000]}"
         )
         payload: dict[str, Any] = {
             "model": _s.gemini_model_general,
@@ -142,18 +167,102 @@ class ProtocolScorer:
             if resp.is_error:
                 logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
                 resp.raise_for_status()
-            raw = resp.json()["choices"][0]["message"]["content"]
-            data = json.loads(raw)
+            raw_payload = resp.json()
+            self._record_llm_usage(raw_payload)
+            data = self._extract_json_content(raw_payload)
             score = float(data.get("relevance_score", protocol.relevance_score))
+            justification = str(data.get("scoring_justification", "")).strip()
+
             protocol.relevance_score = max(0.0, min(100.0, score))
+            protocol.scoring_justification = (
+                justification[:300]
+                if justification
+                else "No justification returned by scorer model."
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Protocol re-scoring failed for '%s': %s",
                 protocol.source_title[:100],
                 exc,
             )
+            if not protocol.scoring_justification:
+                protocol.scoring_justification = "Scoring call failed; retained previous relevance score."
 
         return protocol
+
+    def _extract_json_content(self, response_json: dict[str, Any]) -> dict[str, Any]:
+        content = (
+            response_json.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "{}")
+        )
+
+        if isinstance(content, list):
+            content = "".join(
+                part.get("text", "") if isinstance(part, dict) else str(part)
+                for part in content
+            )
+
+        if not isinstance(content, str):
+            content = str(content)
+
+        return json.loads(content)
+
+    def _build_scoring_text(self, protocol: ExtractedProtocol) -> str:
+        """Build scoring text using only local recursion levels 0 and 1."""
+        blocks: list[str] = []
+        queue: list[tuple[ExtractedProtocol, int]] = [(protocol, 0)]
+
+        while queue:
+            current, local_level = queue.pop(0)
+            if local_level > 1:
+                continue
+
+            text = (current.protocol_text or "").strip()
+            if text:
+                blocks.append(
+                    f"[Level {local_level}] {current.source_title}\n{text}"
+                )
+
+            if local_level < 1 and current.nested_protocols:
+                queue.extend((child, local_level + 1) for child in current.nested_protocols)
+
+        return "\n\n".join(blocks).strip()
+
+    def _record_llm_usage(self, response_json: dict[str, Any]) -> None:
+        usage = response_json.get("usage") or {}
+
+        in_tokens = int(
+            usage.get("prompt_tokens")
+            or usage.get("input_tokens")
+            or usage.get("promptTokens")
+            or 0
+        )
+        out_tokens = int(
+            usage.get("completion_tokens")
+            or usage.get("output_tokens")
+            or usage.get("completionTokens")
+            or 0
+        )
+        total_tokens = int(usage.get("total_tokens") or (in_tokens + out_tokens))
+
+        self._llm_call_count += 1
+        event: dict[str, int | str] = {
+            "step": "8",
+            "call_index": self._llm_call_count,
+            "input_tokens": in_tokens,
+            "output_tokens": out_tokens,
+            "total_tokens": total_tokens,
+        }
+        self._llm_token_events.append(event)
+
+        logger.info(
+            "LLM step 8 tokens (call %d) - in=%d out=%d total=%d",
+            self._llm_call_count,
+            in_tokens,
+            out_tokens,
+            total_tokens,
+        )
 
 
 if __name__ == "__main__":
@@ -168,22 +277,22 @@ if __name__ == "__main__":
     from models.query import ExpandedQuery
     from utils.intermediate_io import (
         STEP1_FILE,
+        STEP7_FILE,
         STEP8_FILE,
-        STEP9_FILE,
         load_model,
         load_model_list,
         save_json,
     )
 
     async def _main() -> None:
-        print("[Step 9] START | Protocol Scoring")
+        print("[Step 8] START | Protocol Scoring")
         intent = load_model(STEP1_FILE, ExpandedQuery).intent
-        protocols = load_model_list(STEP8_FILE, ExtractedProtocol)
+        protocols = load_model_list(STEP7_FILE, ExtractedProtocol)
         rescored = await ProtocolScorer().score_all(protocols, intent)
-        save_json(rescored, STEP9_FILE)
-        print(f"Re-scored {len(rescored)} protocols from Step 8 output.")
+        save_json(rescored, STEP8_FILE)
+        print(f"Re-scored {len(rescored)} protocols from Step 7 output.")
         print(
-            f"[Step 9] DONE | input={len(protocols)} output={len(rescored)} | Output: intermediate_outputs/{STEP9_FILE}"
+            f"[Step 8] DONE | input={len(protocols)} output={len(rescored)} | Output: intermediate_outputs/{STEP8_FILE}"
         )
 
     asyncio.run(_main())

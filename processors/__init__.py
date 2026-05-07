@@ -6,7 +6,6 @@ from .text_extractor import TextExtractor
 from .orchestrator import MultiSourceOrchestrator
 from .full_text_filter import FullTextFilter
 from .protocol_extractor import ProtocolExtractor
-from .solve_references import ReferenceResolver
 from .protocol_scorer import ProtocolScorer
 from .protocol_formatter import ProtocolFormatter
 
@@ -19,7 +18,6 @@ __all__ = [
     "MultiSourceOrchestrator",
     "FullTextFilter",
     "ProtocolExtractor",
-    "ReferenceResolver",
     "ProtocolScorer",
     "ProtocolFormatter",
 ]
