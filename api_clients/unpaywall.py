@@ -6,6 +6,7 @@ used exclusively in the full-text retrieval phase.
 
 Docs: https://unpaywall.org/products/api
 """
+
 from __future__ import annotations
 
 import logging
@@ -65,7 +66,7 @@ class UnpaywallClient(BaseAPIClient):
             )
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Unpaywall lookup failed for %s: %s", paper.doi, exc)
+            logger.debug("Unpaywall lookup failed for %s: %s", paper.doi, exc)
             return None
 
         # Prefer direct PDF URLs, then try OA landing/fulltext links.
@@ -96,7 +97,9 @@ class UnpaywallClient(BaseAPIClient):
                 if result is not None:
                     return result
             except Exception as exc:  # noqa: BLE001
-                logger.debug("Unpaywall candidate failed for %s (%s): %s", paper.doi, url, exc)
+                logger.debug(
+                    "Unpaywall candidate failed for %s (%s): %s", paper.doi, url, exc
+                )
 
         return None
 
@@ -116,7 +119,9 @@ class UnpaywallClient(BaseAPIClient):
 
         head = text[:3000].lower().lstrip()
         is_html = head.startswith("<") and ("<html" in head or "<!doctype" in head)
-        plain_len = len(_strip_tags_and_normalise(text)) if is_html else len(_collapse_ws(text))
+        plain_len = (
+            len(_strip_tags_and_normalise(text)) if is_html else len(_collapse_ws(text))
+        )
         if _looks_like_preview(text, plain_len):
             return None
 

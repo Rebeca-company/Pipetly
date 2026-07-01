@@ -1,4 +1,5 @@
 """Abstract base class shared by all API clients."""
+
 from __future__ import annotations
 
 import asyncio
@@ -102,7 +103,9 @@ class BaseAPIClient(ABC):
                     dt = parsedate_to_datetime(value)
                     if dt.tzinfo is None:
                         dt = dt.replace(tzinfo=_dt.timezone.utc)
-                    return max(0.0, (dt - _dt.datetime.now(_dt.timezone.utc)).total_seconds())
+                    return max(
+                        0.0, (dt - _dt.datetime.now(_dt.timezone.utc)).total_seconds()
+                    )
                 except (TypeError, ValueError):
                     pass
 
@@ -130,7 +133,18 @@ class BaseAPIClient(ABC):
                 resp.raise_for_status()
                 elapsed_ms = (_time.monotonic() - t0) * 1000
                 self._request_stats.append(
-                    {"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": False}
+                    {
+                        "url": url,
+                        "response_time_ms": round(elapsed_ms, 1),
+                        "is_error": False,
+                    }
+                )
+                logger.debug(
+                    "[%s] GET %s -> %d (%.0f ms)", 
+                    self.__class__.__name__, 
+                    url, 
+                    resp.status_code, 
+                    elapsed_ms
                 )
                 return resp
             except httpx.HTTPStatusError as exc:
@@ -143,7 +157,7 @@ class BaseAPIClient(ABC):
                         if retry_after is not None:
                             wait = max(wait, retry_after)
                         await self._limiter.notify_rate_limited(wait)
-                    logger.warning(
+                    logger.debug(
                         "Retryable HTTP %s from %s - retrying in %.2fs",
                         exc.response.status_code,
                         url,
@@ -153,23 +167,35 @@ class BaseAPIClient(ABC):
                     continue
                 elapsed_ms = (_time.monotonic() - t0) * 1000
                 self._request_stats.append(
-                    {"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True}
+                    {
+                        "url": url,
+                        "response_time_ms": round(elapsed_ms, 1),
+                        "is_error": True,
+                    }
                 )
                 raise
             except httpx.RequestError as exc:
                 last_exc = exc
                 if attempt < _settings.http_max_retries:
                     wait = self._compute_backoff(attempt)
-                    logger.warning("Request error for %s: %s – retrying in %.2fs", url, exc, wait)
+                    logger.debug(
+                        "Request error for %s: %s – retrying in %.2fs", url, exc, wait
+                    )
                     await asyncio.sleep(wait)
                     continue
                 elapsed_ms = (_time.monotonic() - t0) * 1000
                 self._request_stats.append(
-                    {"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True}
+                    {
+                        "url": url,
+                        "response_time_ms": round(elapsed_ms, 1),
+                        "is_error": True,
+                    }
                 )
                 raise
         elapsed_ms = (_time.monotonic() - t0) * 1000
-        self._request_stats.append({"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True})
+        self._request_stats.append(
+            {"url": url, "response_time_ms": round(elapsed_ms, 1), "is_error": True}
+        )
         raise last_exc or RuntimeError("HTTP retries exhausted")
 
     # ── Abstract interface ────────────────────────────────────────────────────

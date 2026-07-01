@@ -13,7 +13,7 @@ User prompt
     │
     ▼
 ┌─────────────────────────────┐
-│  1. Query Expansion         │  Gemini rewrites the prompt into keyword queries
+│  1. Query Expansion         │  LLM rewrites the prompt into keyword queries
 │     (processors/)           │  (concept strings)
 └────────────┬────────────────┘
              │
@@ -127,7 +127,7 @@ Pipetly/
 
 - Python 3.11+
 - A [conda](https://docs.conda.io/) environment named `pipetly` (or any venv)
-- An [OpenRouter](https://openrouter.ai/) API key (used to call Gemini models)
+- An [OpenRouter](https://openrouter.ai/) API key (used to call LLM models)
 
 ---
 

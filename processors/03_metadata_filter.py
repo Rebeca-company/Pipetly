@@ -4,6 +4,7 @@ Remove duplicate papers and entries that lack a DOI so that downstream
 steps (full-text retrieval, protocol extraction) operate on a clean,
 deduplicated set of uniquely identifiable records.
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 _WS_RE = re.compile(r"\s+")
 _PUNCT_RE = re.compile(r"[^\w\s]")
 _DOI_PREFIX_RE = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:)", re.IGNORECASE)
+
 
 def _normalise_title(title: str) -> str:
     # 1. Quitar acentos: "Détection" → "Detection"
@@ -48,7 +50,7 @@ def _completeness(paper: Paper) -> int:
     if paper.title:
         score += 1
     if paper.abstract:
-        score += 3        # abstract is high-value
+        score += 3  # abstract is high-value
     if paper.authors:
         score += min(len(paper.authors), 10)
     if paper.year:
@@ -76,7 +78,6 @@ class MetadataFilter:
            sharing the same normalised title (but different DOIs) are also
            collapsed; again the most complete record is kept.
         """
-        logger.info("Step 3 start - Metadata filtering on %d papers.", len(papers))
         no_doi: int = 0
 
         # ── Pass 1: DOI deduplication ─────────────────────────────────────
@@ -89,9 +90,14 @@ class MetadataFilter:
             uid = _canonical_doi(paper.doi)
             if not uid:
                 no_doi += 1
-                logger.debug("Invalid DOI after normalization – discarding '%s'", paper.title[:60])
+                logger.debug(
+                    "Invalid DOI after normalization – discarding '%s'",
+                    paper.title[:60],
+                )
                 continue
-            if uid not in doi_best or _completeness(paper) > _completeness(doi_best[uid]):
+            if uid not in doi_best or _completeness(paper) > _completeness(
+                doi_best[uid]
+            ):
                 doi_best[uid] = paper
 
         doi_dupes = len(papers) - no_doi - len(doi_best)
@@ -101,14 +107,20 @@ class MetadataFilter:
         for paper in doi_best.values():
             norm = _normalise_title(paper.title)
             if not norm:
-                title_best[_canonical_doi(paper.doi or "")] = paper  # keep by DOI if no title
+                title_best[_canonical_doi(paper.doi or "")] = (
+                    paper  # keep by DOI if no title
+                )
                 continue
-            if norm not in title_best or _completeness(paper) > _completeness(title_best[norm]):
+            if norm not in title_best or _completeness(paper) > _completeness(
+                title_best[norm]
+            ):
                 if norm in title_best:
                     logger.debug(
                         "Title duplicate – keeping '%s' (%s) over '%s' (%s)",
-                        paper.title[:60], paper.doi,
-                        title_best[norm].title[:60], title_best[norm].doi,
+                        paper.title[:60],
+                        paper.doi,
+                        title_best[norm].title[:60],
+                        title_best[norm].doi,
                     )
                 title_best[norm] = paper
 
@@ -116,7 +128,7 @@ class MetadataFilter:
         accepted = list(title_best.values())
 
         logger.info(
-            "Step 3 - Metadata filtering: %d raw -> %d accepted "
+            "Metadata filtering: %d raw -> %d accepted "
             "(%d no-DOI discarded, %d DOI-duplicates removed, "
             "%d title-duplicates removed).",
             len(papers),
@@ -125,7 +137,6 @@ class MetadataFilter:
             doi_dupes,
             title_dupes,
         )
-        logger.info("Step 3 complete - Metadata filtering finished.")
         return accepted
 
 
@@ -134,20 +145,26 @@ class MetadataFilter:
 if __name__ == "__main__":
     import logging  # noqa: F811
 
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    from utils.logger import setup_logging, set_stage_logger
 
-    from utils.intermediate_io import STEP2_FILE, STEP3_FILE, load_model_list, save_json
-    from models.paper import Paper  # noqa: F811
+    setup_logging()
+    set_stage_logger("step3_metadata_filter")
 
-    _papers = load_model_list(STEP2_FILE, Paper)
-    print("[Step 3] START | Metadata Filtering")
-    _filtered = MetadataFilter().run(_papers)
-    save_json(_filtered, STEP3_FILE)
-    print(f"{len(_filtered)} papers passed metadata filter.")
-    print(
-        f"[Step 3] DONE | input={len(_papers)} output={len(_filtered)} | Output: intermediate_outputs/{STEP3_FILE}"
-    )
+    from utils.intermediate_io import STEP2_FILE, STEP3_FILE, load_model, save_json
+    from models.paper import SearchResult  # noqa: F811
+
+    def _main() -> None:
+        search_result = load_model(STEP2_FILE, SearchResult)
+        _papers = search_result.papers
+        logger.info("[Step 3] START | Metadata Filtering")
+        _filtered = MetadataFilter().run(_papers)
+        save_json(_filtered, STEP3_FILE)
+        logger.info("%d unique papers with DOI after filtering.", len(_filtered))
+        logger.info(
+            "[Step 3] DONE | input=%d output=%d | Output: intermediate_outputs/%s",
+            len(_papers),
+            len(_filtered),
+            STEP3_FILE,
+        )
+
+    _main()

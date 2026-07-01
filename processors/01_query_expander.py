@@ -1,8 +1,10 @@
 """Module 1 – Query Expansion.
 
-Uses Gemini 3 Flash (via OpenRouter) to transform the raw user prompt
-into structured keyword and semantic queries.
+Query Expansion Module (Step 1).
+Uses an LLM (via OpenRouter) to transform the raw user prompt
+into an expanded search intent and a list of specific keyword combinations.
 """
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,7 @@ import httpx
 
 from config import get_settings
 from models.query import ExpandedQuery
+from utils.llm_client import BaseLLMProcessor
 
 logger = logging.getLogger(__name__)
 _s = get_settings()
@@ -47,7 +50,7 @@ Given a description of an experimental technique or research need, generate opti
 - Do not add generic scientific verbs (e.g., "role of", "effect of", "impact of") unless they are part of an established technical term.
 """
 
-_EXPANDED_QUERY_SCHEMA:dict = {
+_EXPANDED_QUERY_SCHEMA: dict = {
     "name": "expanded_query",
     "strict": True,
     "schema": {
@@ -56,38 +59,35 @@ _EXPANDED_QUERY_SCHEMA:dict = {
             "intent": {
                 "type": "string",
             },
-            "concept_strings": {
+            "queries": {
                 "type": "array",
                 "items": {"type": "string"},
             },
         },
-        "required": ["intent", "concept_strings"],
+        "required": ["intent", "queries"],
         "additionalProperties": False,
     },
 }
 
 
-class QueryExpander:
-    """Calls Gemini via OpenRouter and returns a validated :class:`ExpandedQuery`."""
+class QueryExpander(BaseLLMProcessor):
+    """Calls the configured LLM via OpenRouter and returns a validated :class:`ExpandedQuery`."""
 
     def __init__(self) -> None:
-        self._base = _s.openrouter_base_url.rstrip("/")
-        self._headers = {
-            "Authorization": f"Bearer {_s.openrouter_api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/pipetly",
-            "X-Title": "Pipetly",
-        }
+        super().__init__("1")
 
     async def expand(self, user_prompt: str) -> ExpandedQuery:
         payload: dict[str, Any] = {
-            "model": _s.gemini_model_general,
+            "model": _s.llm_model_general,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.2,
-            "response_format": {"type": "json_schema", "json_schema": _EXPANDED_QUERY_SCHEMA},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": _EXPANDED_QUERY_SCHEMA,
+            },
         }
         async with httpx.AsyncClient(timeout=_s.http_timeout) as client:
             resp = await client.post(
@@ -96,12 +96,14 @@ class QueryExpander:
                 headers=self._headers,
             )
             if resp.is_error:
-                logger.error(
-                    "OpenRouter error %s – %s", resp.status_code, resp.text
-                )
+                logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
                 resp.raise_for_status()
 
-        raw_content: str = resp.json()["choices"][0]["message"]["content"]
+        raw_payload = resp.json()
+        self._record_llm_usage(raw_payload)
+        raw_content: str = (
+            raw_payload.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+        )
         data = json.loads(raw_content)
         return ExpandedQuery(**data)
 
@@ -111,12 +113,13 @@ class QueryExpander:
 if __name__ == "__main__":
     import asyncio
     import sys
+    from utils.logger import set_stage_logger, setup_logging
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    setup_logging()
+    set_stage_logger("step1_query_expansion")
+
+    from config import get_settings
+    from utils.telemetry import log_standalone_telemetry
 
     from utils.intermediate_io import STEP1_FILE, save_json  # noqa: E402
 
@@ -127,15 +130,20 @@ if __name__ == "__main__":
     _prompt = " ".join(sys.argv[1:])
 
     async def _main() -> None:
-        print("[Step 1] START | Query Expansion")
+        logger.info("[Step 1] START | Query Expansion")
         expander = QueryExpander()
         expanded = await expander.expand(_prompt)
         save_json(expanded, STEP1_FILE)
-        print(f"Intent  : {expanded.intent}")
-        print(f"concept_strings: {expanded.concept_strings}")
-        print(
-            f"[Step 1] DONE | intent_generated=true concept_queries={len(expanded.concept_strings)} "
-            f"| Output: intermediate_outputs/{STEP1_FILE}"
+        logger.info("Intent  : %s", expanded.intent)
+        logger.info("queries: %s", expanded.queries)
+        logger.info(
+            "[Step 1] DONE | intent_generated=true concept_queries=%d | Output: intermediate_outputs/%s",
+            len(expanded.queries),
+            STEP1_FILE,
         )
+
+        events = expander.get_llm_token_events()
+        _s = get_settings()
+        await log_standalone_telemetry(events, _s.llm_model_general, "query_expander")
 
     asyncio.run(_main())

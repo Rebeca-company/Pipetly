@@ -6,6 +6,7 @@ Implements Step 7 as four explicit recursive sub-steps:
 - Step 7.3: Resolve citation metadata from references section and fetch full text
 - Step 7.4: Recurse into inherited protocol extraction until max depth
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,6 +19,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 from config import get_settings
+from utils.llm_client import BaseLLMProcessor
 from api_clients import (
     CrossRefClient,
     ElsevierClient,
@@ -29,8 +31,16 @@ from api_clients import (
     UnpaywallClient,
 )
 from models.paper import FullText, FullTextFormat, Paper
-from models.protocol import ExtractedProtocol, InheritedReference
-from processors.text_extractor import TextExtractor
+from models.protocol import (
+    ExtractedProtocol,
+    InheritedReference,
+    InheritedReferencesOutput,
+    ProtocolIntervalOutput,
+    ReferenceMetadataOutput,
+)
+import importlib
+
+TextExtractor = importlib.import_module("processors.05_text_extractor").TextExtractor
 
 logger = logging.getLogger(__name__)
 _s = get_settings()
@@ -168,7 +178,7 @@ _STEP_7_3_SCHEMA: dict[str, Any] = {
 }
 
 
-class ProtocolExtractor:
+class ProtocolExtractor(BaseLLMProcessor):
     """Recursive Step 7 processor (7.1-7.4) with token accounting."""
 
     FT_CLIENT_ORDER = [
@@ -196,19 +206,12 @@ class ProtocolExtractor:
         max_concurrent_fetches: int = 5,
         max_concurrent_llm: int = _s.llm_max_concurrent,
     ) -> None:
+        super().__init__("7")
         self._max_depth = (
             _s.max_citation_depth if _s.max_citation_depth is not None else max_depth
         )
         if self._max_depth is None:
             self._max_depth = 1
-
-        self._base = _s.openrouter_base_url.rstrip("/")
-        self._headers = {
-            "Authorization": f"Bearer {_s.openrouter_api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/pipetly",
-            "X-Title": "Pipetly",
-        }
 
         self._protocol_semaphore = asyncio.Semaphore(max_concurrent_protocols)
         self._fetch_semaphore = asyncio.Semaphore(max_concurrent_fetches)
@@ -227,10 +230,8 @@ class ProtocolExtractor:
         # Cycle guard: (paper key, normalized intent)
         self._visited_protocol_nodes: set[tuple[str, str]] = set()
 
-        # Per-call and aggregated token accounting.
-        self._llm_token_events: list[dict[str, Any]] = []
+        # Aggregated token accounting
         self._llm_usage_by_step: dict[str, dict[str, int]] = {}
-        self._llm_call_count = 0
 
     async def extract_all(
         self,
@@ -238,12 +239,7 @@ class ProtocolExtractor:
         user_intent: str,
     ) -> list[ExtractedProtocol]:
         """Run recursive Step 7 extraction for all input papers."""
-        logger.info(
-            "Step 7 start - Recursive protocol extraction on %d papers (max depth=%d).",
-            len(papers),
-            self._max_depth,
-        )
-
+        protocols: list[ExtractedProtocol] = []
         self._seed_cache_with_input_papers(papers)
         self._visited_protocol_nodes.clear()
         self._llm_token_events.clear()
@@ -258,10 +254,12 @@ class ProtocolExtractor:
         try:
             async with contextlib.AsyncExitStack() as stack:
                 self._ft_clients = [
-                    await stack.enter_async_context(cls()) for cls in self.FT_CLIENT_ORDER
+                    await stack.enter_async_context(cls())
+                    for cls in self.FT_CLIENT_ORDER
                 ]
                 self._search_clients = [
-                    await stack.enter_async_context(cls()) for cls in self.SEARCH_CLIENT_ORDER
+                    await stack.enter_async_context(cls())
+                    for cls in self.SEARCH_CLIENT_ORDER
                 ]
 
                 tasks = [
@@ -288,7 +286,7 @@ class ProtocolExtractor:
 
         self._log_llm_usage_summary()
         logger.info(
-            "Step 7 complete - Generated %d recursive protocols from %d papers.",
+            "Recursive protocol extraction: Generated %d protocols from %d papers.",
             len(protocols),
             len(papers),
         )
@@ -343,9 +341,8 @@ class ProtocolExtractor:
         if step_7_1_payload is None:
             return None
 
-        protocol_text = (step_7_1_payload.get("protocol_text") or "").strip()
-        score = float(step_7_1_payload.get("relevance_score", 0.0))
-        score = max(0.0, min(100.0, score))
+        protocol_text = step_7_1_payload.protocol_text.strip()
+        score = max(0.0, min(100.0, step_7_1_payload.relevance_score))
         if score == 0.0 and not protocol_text:
             return None
 
@@ -390,7 +387,11 @@ class ProtocolExtractor:
 
         for inherited_ref in inherited_refs:
             # Step 7.3
-            child_paper, child_plain_text, full_text_found_by = await self._step_7_3_metadata_and_fulltext_retrieval(
+            (
+                child_paper,
+                child_plain_text,
+                full_text_found_by,
+            ) = await self._step_7_3_metadata_and_fulltext_retrieval(
                 inherited_reference=inherited_ref,
                 references_section=references_section,
                 source_paper=paper,
@@ -432,24 +433,32 @@ class ProtocolExtractor:
         paper_text: str,
         source_paper: Paper,
         depth: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[ProtocolIntervalOutput]:
         logger.info(
             "Step 7.1 (depth=%d) - protocol interval extraction for '%s'.",
             depth,
             source_paper.title[:100],
         )
-        prompt = (
-            f"User intent:\n{user_intent}\n\n"
-            "Paper full text:\n"
-            f"{paper_text}"
-        )
-        return await self._call_llm_json(
+        prompt = f"User intent:\n{user_intent}\n\nPaper full text:\n{paper_text}"
+        raw = await self._call_llm_json(
             step_key="7.1",
-            model=_s.gemini_model_fulltext,
+            model=_s.llm_model_fulltext,
             system_prompt=_STEP_7_1_SYSTEM,
             user_prompt=prompt,
             schema=_STEP_7_1_SCHEMA,
         )
+        if raw is None:
+            return None
+        try:
+            return ProtocolIntervalOutput.model_validate(raw)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Step 7.1 (depth=%d) - ProtocolIntervalOutput validation failed for '%s': %s",
+                depth,
+                source_paper.title[:100],
+                exc,
+            )
+            return None
 
     async def _step_7_2_identify_inherited_references(
         self,
@@ -465,30 +474,35 @@ class ProtocolExtractor:
             depth,
             source_paper.title[:100],
         )
-        prompt = (
-            "Protocol text:\n"
-            f"{protocol_text}"
-        )
-        payload = await self._call_llm_json(
+        prompt = f"Protocol text:\n{protocol_text}"
+        raw = await self._call_llm_json(
             step_key="7.2",
-            model=_s.gemini_model_general,
+            model=_s.llm_model_general,
             system_prompt=_STEP_7_2_SYSTEM,
             user_prompt=prompt,
             schema=_STEP_7_2_SCHEMA,
         )
-        if payload is None:
+        if raw is None:
             return []
 
-        refs_raw = payload.get("inherited_references") or []
+        try:
+            parsed = InheritedReferencesOutput.model_validate(raw)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Step 7.2 (depth=%d) - InheritedReferencesOutput validation failed for '%s': %s",
+                depth,
+                source_paper.title[:100],
+                exc,
+            )
+            return []
+
         refs: list[InheritedReference] = []
         seen: set[tuple[str, str]] = set()
 
-        for item in refs_raw:
-            if not isinstance(item, dict):
-                continue
-            context_phrase = (item.get("context_phrase") or "").strip()
-            search_intent = (item.get("search_intent") or "").strip() or None
-            reference_text = (item.get("reference_text") or "").strip() or None
+        for item in parsed.inherited_references:
+            context_phrase = (item.context_phrase or "").strip()
+            search_intent = (item.search_intent or "").strip() or None
+            reference_text = (item.reference_text or "").strip() or None
 
             if not context_phrase:
                 continue
@@ -525,9 +539,8 @@ class ProtocolExtractor:
         depth: int,
     ) -> tuple[Optional[Paper], Optional[str], Optional[str]]:
         reference_text = (
-            (inherited_reference.reference_text or "").strip()
-            or inherited_reference.context_phrase.strip()
-        )
+            inherited_reference.reference_text or ""
+        ).strip() or inherited_reference.context_phrase.strip()
         if not reference_text:
             return None, None, None
 
@@ -549,20 +562,29 @@ class ProtocolExtractor:
         )
         metadata = await self._call_llm_json(
             step_key="7.3",
-            model=_s.gemini_model_general,
+            model=_s.llm_model_general,
             system_prompt=_STEP_7_3_SYSTEM,
             user_prompt=prompt,
             schema=_STEP_7_3_SCHEMA,
             extra_log_context=f"depth={depth}",
         )
         if metadata is not None:
-            raw_target_doi = str(metadata.get("target_doi") or "").strip()
-            if raw_target_doi:
+            try:
+                ref_meta = ReferenceMetadataOutput.model_validate(metadata)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Step 7.3 (depth=%d) - ReferenceMetadataOutput validation failed for '%s': %s",
+                    depth,
+                    reference_text[:100],
+                    exc,
+                )
+                ref_meta = ReferenceMetadataOutput()
+
+            if ref_meta.target_doi:
                 # Keep DOI normalization consistent with full-text retrieval.
-                target_doi = _normalize_doi(raw_target_doi) or None
-            target_title = (metadata.get("target_title") or "").strip() or None
-            llm_year_raw = metadata.get("target_year")
-            target_year = llm_year_raw if isinstance(llm_year_raw, int) else None
+                target_doi = _normalize_doi(ref_meta.target_doi.strip()) or None
+            target_title = (ref_meta.target_title or "").strip() or None
+            target_year = ref_meta.target_year
 
             if target_doi:
                 inherited_reference.target_doi = target_doi
@@ -591,7 +613,9 @@ class ProtocolExtractor:
                 url=None,
             )
         else:
-            candidate_paper = await self._search_by_title(target_title or reference_text, target_year)
+            candidate_paper = await self._search_by_title(
+                target_title or reference_text, target_year
+            )
             if candidate_paper is None:
                 candidate_paper = Paper(
                     doi=None,
@@ -613,7 +637,9 @@ class ProtocolExtractor:
         if candidate_paper.year is not None and inherited_reference.target_year is None:
             inherited_reference.target_year = candidate_paper.year
 
-        child_plain_text, full_text_found_by = await self._fetch_plain_text_cached(candidate_paper)
+        child_plain_text, full_text_found_by = await self._fetch_plain_text_cached(
+            candidate_paper
+        )
         if not child_plain_text:
             logger.info(
                 "Step 7.3 (depth=%d) - full text not available for '%s'.",
@@ -636,9 +662,8 @@ class ProtocolExtractor:
             return None
 
         nested_intent = (
-            (inherited_reference.search_intent or "").strip()
-            or inherited_reference.context_phrase.strip()
-        )
+            inherited_reference.search_intent or ""
+        ).strip() or inherited_reference.context_phrase.strip()
         if not nested_intent:
             return None
 
@@ -653,17 +678,20 @@ class ProtocolExtractor:
         child.full_text = FullText(
             format=FullTextFormat.PLAIN,
             content=child_plain_text,
-            is_abstract_only=False,
         )
 
         return await self._extract_protocol_recursive(child, nested_intent, next_depth)
 
-    async def _search_by_title(self, title: str, target_year: Optional[int]) -> Optional[Paper]:
+    async def _search_by_title(
+        self, title: str, target_year: Optional[int]
+    ) -> Optional[Paper]:
         title = title.strip()
         if not title:
             return None
 
-        clients = [client for client in self._search_clients if hasattr(client, "search")]
+        clients = [
+            client for client in self._search_clients if hasattr(client, "search")
+        ]
         if not clients:
             return None
 
@@ -684,7 +712,9 @@ class ProtocolExtractor:
             return None
         return _find_best_title_match(title, deduped, target_year)
 
-    async def _fetch_plain_text_cached(self, paper: Paper) -> tuple[Optional[str], Optional[str]]:
+    async def _fetch_plain_text_cached(
+        self, paper: Paper
+    ) -> tuple[Optional[str], Optional[str]]:
         cache_key = _paper_key(paper)
 
         if paper.doi:
@@ -715,7 +745,9 @@ class ProtocolExtractor:
             self._plain_cache[cache_key] = (fetched_text, fetched_source)
             return fetched_text, fetched_source
 
-    async def _fetch_plain_text(self, paper: Paper) -> tuple[Optional[str], Optional[str]]:
+    async def _fetch_plain_text(
+        self, paper: Paper
+    ) -> tuple[Optional[str], Optional[str]]:
         # If paper already has full text, normalise it through TextExtractor first.
         if paper.full_text and paper.full_text.content.strip():
             plain = self._extract_and_validate_plain_text(
@@ -833,7 +865,7 @@ class ProtocolExtractor:
                     resp.raise_for_status()
 
                 raw_payload = resp.json()
-                self._record_llm_usage(step_key, raw_payload)
+                self._record_llm_usage(raw_payload, step_key=step_key)
 
                 content = (
                     raw_payload.get("choices", [{}])[0]
@@ -860,65 +892,30 @@ class ProtocolExtractor:
                 )
                 return None
 
-    def _record_llm_usage(self, step_key: str, response_json: dict[str, Any]) -> None:
-        usage = response_json.get("usage") or {}
-
-        in_tokens = int(
-            usage.get("prompt_tokens")
-            or usage.get("input_tokens")
-            or usage.get("promptTokens")
-            or 0
-        )
-        out_tokens = int(
-            usage.get("completion_tokens")
-            or usage.get("output_tokens")
-            or usage.get("completionTokens")
-            or 0
-        )
-        total_tokens = int(usage.get("total_tokens") or (in_tokens + out_tokens))
-
-        self._llm_call_count += 1
-
-        event = {
-            "step": step_key,
-            "call_index": self._llm_call_count,
-            "input_tokens": in_tokens,
-            "output_tokens": out_tokens,
-            "total_tokens": total_tokens,
-        }
-        self._llm_token_events.append(event)
-
-        agg = self._llm_usage_by_step.setdefault(
-            step_key,
-            {
-                "calls": 0,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "total_tokens": 0,
-            },
-        )
-        agg["calls"] += 1
-        agg["input_tokens"] += in_tokens
-        agg["output_tokens"] += out_tokens
-        agg["total_tokens"] += total_tokens
-
-        logger.info(
-            "LLM step %s tokens (call %d) - in=%d out=%d total=%d",
-            step_key,
-            self._llm_call_count,
-            in_tokens,
-            out_tokens,
-            total_tokens,
-        )
-
     def _log_llm_usage_summary(self) -> None:
-        if not self._llm_usage_by_step:
+        events = self.get_llm_token_events()
+        if not events:
             logger.info("LLM usage summary - no calls recorded.")
             return
 
+        by_step = {}
+        for ev in events:
+            sk = ev.get("step", "7")
+            if sk not in by_step:
+                by_step[sk] = {
+                    "calls": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                }
+            by_step[sk]["calls"] += 1
+            by_step[sk]["input_tokens"] += ev.get("input_tokens", 0)
+            by_step[sk]["output_tokens"] += ev.get("output_tokens", 0)
+            by_step[sk]["total_tokens"] += ev.get("total_tokens", 0)
+
         logger.info("LLM usage summary by step:")
-        for step_key in sorted(self._llm_usage_by_step.keys()):
-            item = self._llm_usage_by_step[step_key]
+        for step_key in sorted(by_step.keys()):
+            item = by_step[step_key]
             logger.info(
                 "  Step %s: calls=%d input_tokens=%d output_tokens=%d total_tokens=%d",
                 step_key,
@@ -951,6 +948,7 @@ class ProtocolExtractor:
 # Helper functions
 # ----------------------------
 
+
 def _extract_plain_text_from_paper(paper: Paper) -> Optional[str]:
     if not paper.full_text:
         return None
@@ -969,7 +967,8 @@ def _extract_references_section(text: str) -> str:
     if match is None:
         return ""
 
-    return text[tail_start + match.start():]
+    return text[tail_start + match.start() :]
+
 
 def _normalize_doi(doi: str) -> str:
     normalized = _DOI_PREFIX_PATTERN.sub("", doi.strip()).lower()
@@ -1096,12 +1095,13 @@ def _select_most_complete(papers: list[Paper]) -> Optional[Paper]:
 
 if __name__ == "__main__":
     import asyncio
+    from utils.logger import set_stage_logger, setup_logging
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    setup_logging()
+    set_stage_logger("step7_protocol_extraction")
+
+    from config import get_settings
+    from utils.telemetry import log_standalone_telemetry
 
     from models.query import ExpandedQuery
     from utils.intermediate_io import (
@@ -1114,7 +1114,7 @@ if __name__ == "__main__":
     )
 
     async def _main() -> None:
-        print("[Step 7] START | Recursive Protocol Extraction")
+        logger.info("[Step 7] START | Recursive Protocol Extraction")
         papers = load_model_list(STEP6_FILE, Paper)
         intent = load_model(STEP1_FILE, ExpandedQuery).intent
 
@@ -1123,10 +1123,16 @@ if __name__ == "__main__":
 
         save_json(protocols, STEP7_FILE)
 
-        print(f"Extracted {len(protocols)} recursive protocols.")
-        print(
-            f"[Step 7] DONE | input={len(papers)} output={len(protocols)} | "
-            f"Output: intermediate_outputs/{STEP7_FILE}"
+        logger.info("Extracted %d recursive protocols.", len(protocols))
+        logger.info(
+            "[Step 7] DONE | input=%d output=%d | Output: intermediate_outputs/%s",
+            len(papers),
+            len(protocols),
+            STEP7_FILE,
         )
+
+        events = extractor.get_llm_token_events()
+        _s = get_settings()
+        await log_standalone_telemetry(events, _s.llm_model_fulltext, "protocol_extractor")
 
     asyncio.run(_main())

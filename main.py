@@ -19,6 +19,7 @@ Pipeline overview
 8. Protocol Scoring        – re-score extracted protocols with score > 60.
 9. Final Formatting & Output – package Top 3 protocols and write Markdown report.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,7 +28,8 @@ import sys
 from pathlib import Path
 
 from config import get_settings
-from models.protocol import ExtractedProtocol
+from utils.logger import set_stage_logger, setup_logging
+from utils.telemetry import calculate_pipeline_costs
 from processors import (
     FullTextFilter,
     FullTextRetriever,
@@ -52,11 +54,6 @@ from utils.intermediate_io import (
     save_json,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
-    datefmt="%H:%M:%S",
-)
 logger = logging.getLogger("pipetly")
 _s = get_settings()
 
@@ -71,38 +68,41 @@ async def run_pipeline(user_prompt: str) -> Path:
     logger.info("User prompt: %s", user_prompt)
 
     # ── Step 1: Query Expansion ───────────────────────────────────────────────
+    set_stage_logger("step1_query_expansion")
     logger.info("[Step 1] START | Query Expansion")
     expander = QueryExpander()
     expanded = await expander.expand(user_prompt)
+    step1_token_events = expander.get_llm_token_events()
     logger.info("Intent  : %s", expanded.intent)
-    logger.info("Queries : %s", expanded.concept_strings)
-    
+    logger.info("Queries : %s", expanded.queries)
+
     save_json(expanded, STEP1_FILE)
     logger.info(
         "[Step 1] DONE | intent_generated=true concept_queries=%d | Output: intermediate_outputs/%s",
-        len(expanded.concept_strings),
+        len(expanded.queries),
         STEP1_FILE,
     )
 
     # ── Step 2: Paper and Metadata Search ────────────────────────────────────
+    set_stage_logger("step2_paper_search")
     logger.info("[Step 2] START | Paper and Metadata Search")
-    raw_papers = await PaperSearcher().search(expanded)
-    logger.info("Collected %d raw paper records from all API sources.", len(raw_papers))
-    save_json(raw_papers, STEP2_FILE)
+    search_result = await PaperSearcher().search(expanded)
+    save_json(search_result, STEP2_FILE)
     logger.info(
         "[Step 2] DONE | raw_records=%d | Output: intermediate_outputs/%s",
-        len(raw_papers),
+        len(search_result.papers),
         STEP2_FILE,
     )
 
     # ── Step 3: Metadata Filtering (dedup + DOI) ─────────────────────────────
+    set_stage_logger("step3_metadata_filter")
     logger.info("[Step 3] START | Metadata Filtering")
-    doi_filtered = MetadataFilter().run(raw_papers)
+    doi_filtered = MetadataFilter().run(search_result.papers)
     logger.info("%d unique papers with DOI after filtering.", len(doi_filtered))
     save_json(doi_filtered, STEP3_FILE)
     logger.info(
         "[Step 3] DONE | input=%d output=%d | Output: intermediate_outputs/%s",
-        len(raw_papers),
+        len(search_result.papers),
         len(doi_filtered),
         STEP3_FILE,
     )
@@ -112,6 +112,7 @@ async def run_pipeline(user_prompt: str) -> Path:
         raise RuntimeError("No papers with a DOI found. Adjust your query or API keys.")
 
     # ── Step 4: Full-Text Retrieval ───────────────────────────────────────────
+    set_stage_logger("step4_full_text_retrieval")
     logger.info("[Step 4] START | Full-Text Retrieval")
     ft_papers = await FullTextRetriever().retrieve(doi_filtered)
     logger.info(
@@ -128,10 +129,13 @@ async def run_pipeline(user_prompt: str) -> Path:
     )
 
     # ── Step 5: Text Extraction (PDF / XML / HTML → plain text) ──────────────
+    set_stage_logger("step5_text_extraction")
     logger.info("[Step 5] START | Text Extraction")
     extracted_papers = TextExtractor().extract_all(ft_papers)
     with_text = sum(1 for p in extracted_papers if p.full_text)
-    logger.info("%d / %d papers have clean plain text.", with_text, len(extracted_papers))
+    logger.info(
+        "%d / %d papers have clean plain text.", with_text, len(extracted_papers)
+    )
     save_json(extracted_papers, STEP5_FILE)
     logger.info(
         "[Step 5] DONE | input=%d output=%d | Output: intermediate_outputs/%s",
@@ -141,6 +145,7 @@ async def run_pipeline(user_prompt: str) -> Path:
     )
 
     # ── Step 6: Post-Extraction Filter (full text length bounds) ─────────────
+    set_stage_logger("step6_post_extraction_filter")
     logger.info("[Step 6] START | Post-Extraction Filter")
     filtered = FullTextFilter().run(extracted_papers)
     save_json(filtered, STEP6_FILE)
@@ -157,12 +162,16 @@ async def run_pipeline(user_prompt: str) -> Path:
         raise RuntimeError("No eligible papers found. Adjust your query or API keys.")
 
     # ── Step 7: Recursive Protocol Extraction (7.1-7.4) ──────────────────────
+    set_stage_logger("step7_protocol_extraction")
     logger.info("[Step 7] START | Recursive Protocol Extraction")
     extractor = ProtocolExtractor(max_depth=3)
     protocols = await extractor.extract_all(filtered, expanded.intent)
     step7_token_events = extractor.get_llm_token_events()
 
-    logger.info("Extracted %d protocol fragments (only score=0 and empty text are discarded).", len(protocols))
+    logger.info(
+        "Extracted %d protocol fragments (only score=0 and empty text are discarded).",
+        len(protocols),
+    )
     save_json(protocols, STEP7_FILE)
     logger.info(
         "[Step 7] DONE | input=%d output=%d | Output: intermediate_outputs/%s",
@@ -174,6 +183,7 @@ async def run_pipeline(user_prompt: str) -> Path:
         raise RuntimeError("No protocols could be extracted from the filtered papers.")
 
     # ── Step 8: Protocol Scoring ─────────────────────────────────────────────
+    set_stage_logger("step8_protocol_scoring")
     logger.info("[Step 8] START | Protocol Scoring")
     scorer = ProtocolScorer()
     rescored_protocols = await scorer.score_all(protocols, expanded.intent)
@@ -188,9 +198,10 @@ async def run_pipeline(user_prompt: str) -> Path:
     )
 
     # ── Step 9: Final Formatting & Output ────────────────────────────────────
+    set_stage_logger("step9_final_formatting")
     logger.info("[Step 9] START | Final Formatting and Output")
     formatter = ProtocolFormatter()
-    top_protocols = await formatter.format_top_protocols(rescored_protocols, expanded.intent)
+    top_protocols = await formatter.format_top_protocols(rescored_protocols)
     logger.info("Top %d protocols selected.", len(top_protocols))
     for item in top_protocols:
         logger.info("  [%.2f] %s", item.score, item.protocol.source_title)
@@ -202,65 +213,38 @@ async def run_pipeline(user_prompt: str) -> Path:
     )
     step9_token_events = formatter.get_llm_token_events()
 
-    # Gemini 3 Flash Preview pricing provided by user:
-    # input: $0.50 / 1M tokens, output: $3.00 / 1M tokens.
-    input_usd_per_million_tokens = 0.50
-    output_usd_per_million_tokens = 3.00
-
     raw_token_events = [
-        *[
-            {"component": "protocol_extractor", **event}
-            for event in step7_token_events
-        ],
-        *[
-            {"component": "protocol_scorer", **event}
-            for event in step8_token_events
-        ],
-        *[
-            {"component": "protocol_formatter", **event}
-            for event in step9_token_events
-        ],
+        *[{"component": "query_expander", **event} for event in step1_token_events],
+        *[{"component": "protocol_extractor", **event} for event in step7_token_events],
+        *[{"component": "protocol_scorer", **event} for event in step8_token_events],
+        *[{"component": "protocol_formatter", **event} for event in step9_token_events],
     ]
 
-    token_events = []
-    for event in raw_token_events:
-        input_tokens = int(event.get("input_tokens", 0))
-        output_tokens = int(event.get("output_tokens", 0))
-        input_cost_usd = (input_tokens / 1_000_000) * input_usd_per_million_tokens
-        output_cost_usd = (output_tokens / 1_000_000) * output_usd_per_million_tokens
-        token_events.append(
-            {
-                **event,
-                "input_cost_usd": round(input_cost_usd, 8),
-                "output_cost_usd": round(output_cost_usd, 8),
-                "total_cost_usd": round(input_cost_usd + output_cost_usd, 8),
-            }
-        )
+    token_events, total_summary = await calculate_pipeline_costs(
+        raw_events=raw_token_events,
+        model_id=_s.llm_model_general,
+    )
 
-    total_input_tokens = sum(int(item.get("input_tokens", 0)) for item in token_events)
-    total_output_tokens = sum(int(item.get("output_tokens", 0)) for item in token_events)
-    total_input_cost_usd = (total_input_tokens / 1_000_000) * input_usd_per_million_tokens
-    total_output_cost_usd = (total_output_tokens / 1_000_000) * output_usd_per_million_tokens
+    logger.info("Pipeline tokens:")
+    logger.info("  Input  : %d", total_summary["total_input_tokens"])
+    logger.info("  Output : %d", total_summary["total_output_tokens"])
+    logger.info("Estimated pipeline cost:")
+    logger.info("  $%.6f (input) + $%.6f (output) = $%.6f total", 
+                total_summary["total_input_cost_usd"], 
+                total_summary["total_output_cost_usd"], 
+                total_summary["total_pipeline_cost_usd"])
 
-    token_report = {
-        "description": "Testing-only LLM token telemetry by call and step.",
-        "pricing_model": "Google: Gemini 3 Flash Preview",
-        "input_usd_per_million_tokens": input_usd_per_million_tokens,
-        "output_usd_per_million_tokens": output_usd_per_million_tokens,
-        "total_calls": len(token_events),
-        "total_input_tokens": total_input_tokens,
-        "total_output_tokens": total_output_tokens,
-        "total_tokens": sum(int(item.get("total_tokens", 0)) for item in token_events),
-        "total_input_cost_usd": round(total_input_cost_usd, 8),
-        "total_output_cost_usd": round(total_output_cost_usd, 8),
-        "total_cost_usd": round(total_input_cost_usd + total_output_cost_usd, 8),
-        "calls": token_events,
-    }
-    save_json(token_report, TEST_LLM_TOKEN_USAGE_FILE)
+    save_json(
+        {
+            "token_events": token_events,
+            "total_summary": total_summary,
+        },
+        TEST_LLM_TOKEN_USAGE_FILE,
+    )
     logger.info(
         "[Testing] Token telemetry saved | calls=%d total_tokens=%d | Output: intermediate_outputs/%s",
-        token_report["total_calls"],
-        token_report["total_tokens"],
+        len(token_events),
+        total_summary["total_tokens"],
         TEST_LLM_TOKEN_USAGE_FILE,
     )
 
@@ -271,12 +255,13 @@ async def run_pipeline(user_prompt: str) -> Path:
         output_path,
     )
     logger.info("[Pipeline] DONE")
+    set_stage_logger(None)
     return output_path
 
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python main.py \"<your research question>\"")
+        print('Usage: python main.py "<your research question>"')
         sys.exit(1)
     prompt = " ".join(sys.argv[1:])
     output = asyncio.run(run_pipeline(prompt))

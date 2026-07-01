@@ -2,6 +2,7 @@
 
 Docs: https://docs.openalex.org/
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,7 +33,7 @@ _LANDING_MARKERS = (
     "subscribe",
     "buy article",
     "access through your institution",
-    "name=\"access\" content=\"no\"",
+    'name="access" content="no"',
 )
 
 
@@ -55,7 +56,7 @@ class OpenAlexClient(BaseAPIClient):
             resp = await self._get(_WORKS_URL, params=params, headers=self._headers())
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
-            logger.error("OpenAlex search failed: %s", exc)
+            logger.debug("OpenAlex search failed: %s", exc)
             return []
 
         papers: list[Paper] = []
@@ -123,7 +124,9 @@ class OpenAlexClient(BaseAPIClient):
                 if ft is not None:
                     return ft
             except Exception as exc:  # noqa: BLE001
-                logger.debug("OpenAlex candidate failed for %s (%s): %s", paper.doi, oa_url, exc)
+                logger.debug(
+                    "OpenAlex candidate failed for %s (%s): %s", paper.doi, oa_url, exc
+                )
 
         return None
 
@@ -153,16 +156,25 @@ class OpenAlexClient(BaseAPIClient):
                 try:
                     pdf_resp = await self._get(meta_pdf_url, headers=self._headers())
                     pdf_probe = pdf_resp.content[:1024].lstrip(b"\xef\xbb\xbf\r\n\t ")
-                    if ("application/pdf" in (pdf_resp.headers.get("content-type") or "").lower()) or pdf_probe.startswith(b"%PDF"):
+                    if (
+                        "application/pdf"
+                        in (pdf_resp.headers.get("content-type") or "").lower()
+                    ) or pdf_probe.startswith(b"%PDF"):
                         b64 = base64.b64encode(pdf_resp.content).decode("ascii")
                         return FullText(format=FullTextFormat.PDF, content=b64)
                 except Exception as exc:  # noqa: BLE001
-                    logger.debug("OpenAlex meta PDF candidate failed for %s: %s", meta_pdf_url, exc)
+                    logger.debug(
+                        "OpenAlex meta PDF candidate failed for %s: %s",
+                        meta_pdf_url,
+                        exc,
+                    )
 
         if is_html and _looks_like_landing_or_preview(text):
             return None
 
-        plain_len = len(_html_visible_text(text)) if is_html else len(_collapse_ws(text))
+        plain_len = (
+            len(_html_visible_text(text)) if is_html else len(_collapse_ws(text))
+        )
         if plain_len < _MIN_TEXT_CHARS:
             return None
 

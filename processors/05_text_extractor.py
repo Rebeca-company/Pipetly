@@ -13,6 +13,7 @@ Supported input formats
 * **HTML** – tag-stripped with the stdlib :class:`html.parser.HTMLParser`.
 * **PLAIN** – returned unchanged.
 """
+
 from __future__ import annotations
 
 import base64
@@ -69,7 +70,6 @@ class TextExtractor:
         Returns only papers for which full text was successfully extracted
         (papers with no raw content or failed extraction are dropped).
         """
-        logger.info("Step 5 start - Text extraction on %d papers.", len(papers))
         extracted = converted = no_text = 0
 
         for paper in papers:
@@ -87,10 +87,8 @@ class TextExtractor:
             clean = self._to_plain(paper.full_text)
             if clean:
                 paper.full_text = FullText(
-                    # Preserve original format for provenance, but update content and abstract-only flag
                     format=paper.full_text.format,
                     content=clean,
-                    is_abstract_only=paper.full_text.is_abstract_only,
                 )
                 converted += 1
             else:
@@ -100,17 +98,11 @@ class TextExtractor:
 
         with_text = [p for p in papers if p.full_text is not None]
         logger.info(
-            "Step 5 - Text extraction: %d already plain | %d converted | %d no text (dropped) -> %d kept.",
+            "Text extraction: %d already plain | %d converted | %d no text (dropped) -> %d kept.",
             extracted,
             converted,
             no_text,
             len(with_text),
-        )
-        logger.info(
-            "Step 5 complete - Text extraction finished with %d/%d papers retained and %d dropped.",
-            len(with_text),
-            len(papers),
-            no_text,
         )
         return with_text
 
@@ -208,6 +200,7 @@ class TextExtractor:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _normalise(text: str) -> str:
     """Collapse whitespace/newlines and strip leading/trailing space."""
     return _WHITESPACE_RE.sub(" ", text).strip()
@@ -244,21 +237,26 @@ class _HTMLTextExtractor(HTMLParser):
 if __name__ == "__main__":
     import logging  # noqa: F811
 
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(name)s – %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    from utils.logger import setup_logging, set_stage_logger
+
+    setup_logging()
+    set_stage_logger("step5_text_extraction")
 
     from utils.intermediate_io import STEP4_FILE, STEP5_FILE, load_model_list, save_json
     from models.paper import Paper  # noqa: F811
 
-    _papers = load_model_list(STEP4_FILE, Paper)
-    print("[Step 5] START | Text Extraction")
-    _before = len(_papers)
-    _extracted = TextExtractor().extract_all(_papers)
-    save_json(_extracted, STEP5_FILE)
-    print(f"{len(_extracted)} / {_before} papers have clean plain text.")
-    print(
-        f"[Step 5] DONE | input={_before} output={len(_extracted)} | Output: intermediate_outputs/{STEP5_FILE}"
-    )
+    def _main() -> None:
+        _papers = load_model_list(STEP4_FILE, Paper)
+        logger.info("[Step 5] START | Text Extraction")
+        _before = len(_papers)
+        _extracted = TextExtractor().extract_all(_papers)
+        save_json(_extracted, STEP5_FILE)
+        logger.info("%d / %d papers have clean plain text.", len(_extracted), _before)
+        logger.info(
+            "[Step 5] DONE | input=%d output=%d | Output: intermediate_outputs/%s",
+            _before,
+            len(_extracted),
+            STEP5_FILE,
+        )
+
+    _main()

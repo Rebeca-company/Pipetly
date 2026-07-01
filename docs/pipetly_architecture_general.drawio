@@ -19,7 +19,7 @@
         <mxCell id="openrouter_label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=top;fontSize=9;fontColor=#d79b00;" value="openrouter.ai" vertex="1">
           <mxGeometry height="15" width="90" x="375" y="158" as="geometry" />
         </mxCell>
-        <mxCell id="gemini" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#d79b00;fontSize=11;fontColor=#333;" value="&lt;b&gt;Gemini 2.5 Flash&lt;/b&gt;&lt;br&gt;google/gemini-2.5-flash" vertex="1">
+        <mxCell id="llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#d79b00;fontSize=11;fontColor=#333;" value="&lt;b&gt;Configured LLM&lt;/b&gt;&lt;br&gt;your/model-name" vertex="1">
           <mxGeometry height="55" width="200" x="490" y="95" as="geometry" />
         </mxCell>
         <mxCell id="config_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" value="&lt;b&gt;config.py / .env&lt;/b&gt;&lt;br&gt;API keys · timeouts · limits" vertex="1">
@@ -28,7 +28,7 @@
         <mxCell id="rateLimiter" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" value="&lt;b&gt;RateLimiter&lt;/b&gt;&lt;br&gt;utils/rate_limiter.py" vertex="1">
           <mxGeometry height="55" width="180" x="940" y="95" as="geometry" />
         </mxCell>
-        <mxCell id="e_or_gem" edge="1" parent="1" source="openrouter" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#d79b00;" target="gemini">
+        <mxCell id="e_or_gem" edge="1" parent="1" source="openrouter" style="edgeStyle=orthogonalEdgeStyle;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#d79b00;" target="llm">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="user" parent="1" style="text;html=1;strokeColor=#6c8ebf;fillColor=#dae8fc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=11;" value="👤&lt;br&gt;&lt;b&gt;User&lt;/b&gt;&lt;br&gt;Research Question" vertex="1">
@@ -46,7 +46,7 @@
         <mxCell id="step1" parent="pipeline_bg" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="&lt;b&gt;Step 1&lt;/b&gt;&lt;br&gt;QueryExpander&lt;br&gt;&lt;font color=&quot;#666&quot; style=&quot;font-size:9px&quot;&gt;query_expander.py&lt;/font&gt;" vertex="1">
           <mxGeometry height="80" width="160" x="20" y="40" as="geometry" />
         </mxCell>
-        <mxCell id="step2" parent="pipeline_bg" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="&lt;b&gt;Step 2&lt;/b&gt;&lt;br&gt;MultiSourceOrchestrator&lt;br&gt;&lt;font color=&quot;#666&quot; style=&quot;font-size:9px&quot;&gt;orchestrator.py&lt;/font&gt;" vertex="1">
+        <mxCell id="step2" parent="pipeline_bg" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="&lt;b&gt;Step 2&lt;/b&gt;&lt;br&gt;PaperSearcher&lt;br&gt;&lt;font color=&quot;#666&quot; style=&quot;font-size:9px&quot;&gt;02_paper_searcher.py&lt;/font&gt;" vertex="1">
           <mxGeometry height="80" width="180" x="230" y="40" as="geometry" />
         </mxCell>
         <mxCell id="step3" parent="pipeline_bg" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="&lt;b&gt;Step 3&lt;/b&gt;&lt;br&gt;FilterPipeline&lt;br&gt;&lt;font color=&quot;#666&quot; style=&quot;font-size:9px&quot;&gt;filter_pipeline.py&lt;/font&gt;" vertex="1">
@@ -96,13 +96,13 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="e_gem_s1" edge="1" parent="1" source="gemini" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;fontSize=9;fontStyle=2;endArrow=open;endFill=0;" target="step1" value="prompt / JSON">
+        <mxCell id="e_gem_s1" edge="1" parent="1" source="llm" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;fontSize=9;fontStyle=2;endArrow=open;endFill=0;" target="step1" value="prompt / JSON">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_gem_s4" edge="1" parent="1" source="gemini" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;fontSize=9;fontStyle=2;endArrow=open;endFill=0;" target="step4" value="extract">
+        <mxCell id="e_gem_s4" edge="1" parent="1" source="llm" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;fontSize=9;fontStyle=2;endArrow=open;endFill=0;" target="step4" value="extract">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_gem_s5" edge="1" parent="1" source="gemini" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;fontSize=9;fontStyle=2;endArrow=open;endFill=0;" target="step5" value="score">
+        <mxCell id="e_gem_s5" edge="1" parent="1" source="llm" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;fontSize=9;fontStyle=2;endArrow=open;endFill=0;" target="step5" value="score">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="api_bg" parent="1" style="swimlane;startSize=25;fillColor=#e1f5fe;strokeColor=#0277bd;fontColor=#01579b;fontSize=12;fontStyle=1;rounded=1;strokeWidth=2;" value="API Clients  (api_clients/)" vertex="1">
@@ -252,7 +252,7 @@
         <mxCell id="LvA3yCcTaIDiuk7FocBO-6" parent="LvA3yCcTaIDiuk7FocBO-5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="&lt;b&gt;Step 1&lt;/b&gt;&lt;br&gt;QueryExpander&lt;br&gt;&lt;font color=&quot;#666&quot; style=&quot;font-size:9px&quot;&gt;query_expander.py&lt;/font&gt;" vertex="1">
           <mxGeometry height="80" width="160" x="20" y="40" as="geometry" />
         </mxCell>
-        <mxCell id="LvA3yCcTaIDiuk7FocBO-7" parent="LvA3yCcTaIDiuk7FocBO-5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="&lt;b&gt;Step 2&lt;/b&gt;&lt;br&gt;MultiSourceOrchestrator&lt;br&gt;&lt;font color=&quot;#666&quot; style=&quot;font-size:9px&quot;&gt;orchestrator.py&lt;/font&gt;" vertex="1">
+        <mxCell id="LvA3yCcTaIDiuk7FocBO-7" parent="LvA3yCcTaIDiuk7FocBO-5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="&lt;b&gt;Step 2&lt;/b&gt;&lt;br&gt;PaperSearcher&lt;br&gt;&lt;font color=&quot;#666&quot; style=&quot;font-size:9px&quot;&gt;02_paper_searcher.py&lt;/font&gt;" vertex="1">
           <mxGeometry height="80" width="180" x="230" y="40" as="geometry" />
         </mxCell>
         <mxCell id="LvA3yCcTaIDiuk7FocBO-8" parent="LvA3yCcTaIDiuk7FocBO-5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="&lt;b&gt;Step 3&lt;/b&gt;&lt;br&gt;FilterPipeline&lt;br&gt;&lt;font color=&quot;#666&quot; style=&quot;font-size:9px&quot;&gt;filter_pipeline.py&lt;/font&gt;" vertex="1">
@@ -344,10 +344,10 @@
         <mxCell id="LvA3yCcTaIDiuk7FocBO-35" parent="1" style="swimlane;startSize=34;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;arcSize=4;" value="Step 2 – Multi-Source Orchestration" vertex="1">
           <mxGeometry height="640" width="340" x="490" y="1922" as="geometry" />
         </mxCell>
-        <mxCell id="LvA3yCcTaIDiuk7FocBO-36" parent="LvA3yCcTaIDiuk7FocBO-35" style="text;html=1;align=center;strokeColor=none;fillColor=none;fontSize=10;fontStyle=2;fontColor=#555555;" value="processors/orchestrator.py" vertex="1">
+        <mxCell id="LvA3yCcTaIDiuk7FocBO-36" parent="LvA3yCcTaIDiuk7FocBO-35" style="text;html=1;align=center;strokeColor=none;fillColor=none;fontSize=10;fontStyle=2;fontColor=#555555;" value="processors/02_paper_searcher.py" vertex="1">
           <mxGeometry height="18" width="320" x="10" y="32" as="geometry" />
         </mxCell>
-        <mxCell id="LvA3yCcTaIDiuk7FocBO-37" parent="LvA3yCcTaIDiuk7FocBO-35" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="&lt;b&gt;MultiSourceOrchestrator&lt;/b&gt;" vertex="1">
+        <mxCell id="LvA3yCcTaIDiuk7FocBO-37" parent="LvA3yCcTaIDiuk7FocBO-35" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="&lt;b&gt;PaperSearcher&lt;/b&gt;" vertex="1">
           <mxGeometry height="34" width="300" x="20" y="56" as="geometry" />
         </mxCell>
         <mxCell id="LvA3yCcTaIDiuk7FocBO-38" parent="LvA3yCcTaIDiuk7FocBO-35" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffacd;strokeColor=#d6b656;fontSize=11;" value="&lt;b&gt;fetch_papers&lt;/b&gt;(expanded_query: ExpandedQuery) → List[Paper]" vertex="1">
@@ -443,10 +443,10 @@
         <mxCell id="LvA3yCcTaIDiuk7FocBO-68" parent="LvA3yCcTaIDiuk7FocBO-65" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffacd;strokeColor=#d6b656;fontSize=11;" value="&lt;b&gt;extract&lt;/b&gt;(paper: Paper) → Optional[ExtractedProtocol]" vertex="1">
           <mxGeometry height="40" width="335" x="20" y="100" as="geometry" />
         </mxCell>
-        <mxCell id="LvA3yCcTaIDiuk7FocBO-69" parent="LvA3yCcTaIDiuk7FocBO-65" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" value="&lt;b&gt;_call_gemini&lt;/b&gt;(text, system_prompt) → Optional[ExtractedProtocol]&lt;br/&gt;System: protocol extraction engine&lt;br/&gt;Temp: 0.1 | json_schema mode&lt;br/&gt;Schema: extracted_protocol&lt;br/&gt;Truncates to 120 000 chars" vertex="1">
+        <mxCell id="LvA3yCcTaIDiuk7FocBO-69" parent="LvA3yCcTaIDiuk7FocBO-65" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" value="&lt;b&gt;_call_llm&lt;/b&gt;(text, system_prompt) → Optional[ExtractedProtocol]&lt;br/&gt;System: protocol extraction engine&lt;br/&gt;Temp: 0.1 | json_schema mode&lt;br/&gt;Schema: extracted_protocol&lt;br/&gt;Truncates to 120 000 chars" vertex="1">
           <mxGeometry height="115" width="335" x="20" y="152" as="geometry" />
         </mxCell>
-        <mxCell id="LvA3yCcTaIDiuk7FocBO-70" parent="LvA3yCcTaIDiuk7FocBO-65" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;" value="&lt;b&gt;_investigate_citations&lt;/b&gt;(protocol, depth)&lt;br/&gt;Recursive · max_citation_depth = 3&lt;br/&gt;&lt;br/&gt;1. _parse_doi_from_bibliography(raw_bib, key)&lt;br/&gt;   Regex heuristic: [N] → DOI extraction&lt;br/&gt;2. _fetch_cited_paper(doi)&lt;br/&gt;   Try EuropePMC / SemanticScholar&lt;br/&gt;3. _call_gemini() on cited paper text&lt;br/&gt;4. _merge_cited_steps(protocol, key, cited)" vertex="1">
+        <mxCell id="LvA3yCcTaIDiuk7FocBO-70" parent="LvA3yCcTaIDiuk7FocBO-65" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;" value="&lt;b&gt;_investigate_citations&lt;/b&gt;(protocol, depth)&lt;br/&gt;Recursive · max_citation_depth = 3&lt;br/&gt;&lt;br/&gt;1. _parse_doi_from_bibliography(raw_bib, key)&lt;br/&gt;   Regex heuristic: [N] → DOI extraction&lt;br/&gt;2. _fetch_cited_paper(doi)&lt;br/&gt;   Try EuropePMC / SemanticScholar&lt;br/&gt;3. _call_llm() on cited paper text&lt;br/&gt;4. _merge_cited_steps(protocol, key, cited)" vertex="1">
           <mxGeometry height="175" width="335" x="20" y="278" as="geometry" />
         </mxCell>
         <mxCell id="LvA3yCcTaIDiuk7FocBO-71" parent="LvA3yCcTaIDiuk7FocBO-65" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#999999;fontSize=10;" value="&lt;b&gt;ProtocolStep schema:&lt;/b&gt;&lt;br/&gt;step_number · description&lt;br/&gt;reagents[] · equipment[]&lt;br/&gt;duration · notes · citation_ref" vertex="1">
@@ -476,7 +476,7 @@
         <mxCell id="LvA3yCcTaIDiuk7FocBO-79" parent="LvA3yCcTaIDiuk7FocBO-75" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" value="asyncio.gather(*tasks)&lt;br/&gt;Parallel scoring of all protocols" vertex="1">
           <mxGeometry height="46" width="270" x="20" y="153" as="geometry" />
         </mxCell>
-        <mxCell id="LvA3yCcTaIDiuk7FocBO-80" parent="LvA3yCcTaIDiuk7FocBO-75" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" value="&lt;b&gt;_score_one&lt;/b&gt;(protocol, intent) → ScoredProtocol&lt;br/&gt;LLM: Gemini 2.5 Flash | Temp: 0.0&lt;br/&gt;System: expert protocol reviewer&lt;br/&gt;Scoring rubric:&lt;br/&gt;1.0 = Perfect match&lt;br/&gt;0.7 = Good match&lt;br/&gt;0.4 = Partial match&lt;br/&gt;0.0 = Not relevant&lt;br/&gt;Schema: protocol_score" vertex="1">
+        <mxCell id="LvA3yCcTaIDiuk7FocBO-80" parent="LvA3yCcTaIDiuk7FocBO-75" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" value="&lt;b&gt;_score_one&lt;/b&gt;(protocol, intent) → ScoredProtocol&lt;br/&gt;LLM: Configured LLM | Temp: 0.0&lt;br/&gt;System: expert protocol reviewer&lt;br/&gt;Scoring rubric:&lt;br/&gt;1.0 = Perfect match&lt;br/&gt;0.7 = Good match&lt;br/&gt;0.4 = Partial match&lt;br/&gt;0.0 = Not relevant&lt;br/&gt;Schema: protocol_score" vertex="1">
           <mxGeometry height="165" width="270" x="20" y="210" as="geometry" />
         </mxCell>
         <mxCell id="LvA3yCcTaIDiuk7FocBO-81" parent="LvA3yCcTaIDiuk7FocBO-75" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" value="Sort by score DESC&lt;br/&gt;Return top_k_protocols = 3" vertex="1">
@@ -506,7 +506,7 @@
         <mxCell id="LvA3yCcTaIDiuk7FocBO-89" parent="LvA3yCcTaIDiuk7FocBO-85" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" value="📄 output/protocols_YYYYMMDD_HHMMSS.md" vertex="1">
           <mxGeometry height="50" width="250" x="20" y="265" as="geometry" />
         </mxCell>
-        <mxCell id="LvA3yCcTaIDiuk7FocBO-90" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" value="&lt;b&gt;LLM: google/gemini-2.5-flash&lt;/b&gt;&lt;br/&gt;via OpenRouter API&lt;br/&gt;Auth: OPENROUTER_API_KEY&lt;br/&gt;Base URL: openrouter.ai/api/v1" vertex="1">
+        <mxCell id="LvA3yCcTaIDiuk7FocBO-90" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" value="&lt;b&gt;LLM: your/model-name&lt;/b&gt;&lt;br/&gt;via OpenRouter API&lt;br/&gt;Auth: OPENROUTER_API_KEY&lt;br/&gt;Base URL: openrouter.ai/api/v1" vertex="1">
           <mxGeometry height="90" width="290" x="862" y="2672" as="geometry" />
         </mxCell>
         <mxCell id="LvA3yCcTaIDiuk7FocBO-91" edge="1" parent="1" source="LvA3yCcTaIDiuk7FocBO-90" style="edgeStyle=orthogonalEdgeStyle;dashed=1;rounded=0;fontSize=9;" target="LvA3yCcTaIDiuk7FocBO-25" value="json_schema">
@@ -565,7 +565,7 @@
         <mxCell id="LvA3yCcTaIDiuk7FocBO-103" parent="LvA3yCcTaIDiuk7FocBO-101" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffacd;strokeColor=#d6b656;fontSize=10;" value="Method / Function" vertex="1">
           <mxGeometry height="28" width="130" x="155" y="30" as="geometry" />
         </mxCell>
-        <mxCell id="LvA3yCcTaIDiuk7FocBO-104" parent="LvA3yCcTaIDiuk7FocBO-101" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" value="LLM Call (Gemini)" vertex="1">
+        <mxCell id="LvA3yCcTaIDiuk7FocBO-104" parent="LvA3yCcTaIDiuk7FocBO-101" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" value="LLM Call" vertex="1">
           <mxGeometry height="28" width="148" x="300" y="30" as="geometry" />
         </mxCell>
         <mxCell id="LvA3yCcTaIDiuk7FocBO-105" parent="LvA3yCcTaIDiuk7FocBO-101" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" value="Processing Step / Filter" vertex="1">

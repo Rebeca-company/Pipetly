@@ -4,6 +4,7 @@ Docs:
   https://www.ncbi.nlm.nih.gov/books/NBK25499/   (E-utilities reference)
   https://www.ncbi.nlm.nih.gov/pmc/tools/developers/  (Open-Access subset)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -46,7 +47,9 @@ class PMCClient(BaseAPIClient):
 
     def _init_rate_limiter(self):
         calls = 10 if _settings.ncbi_api_key else 3
-        return get_shared_limiter(self.RATE_LIMITER_KEY, calls=calls, period=self.RATE_PERIOD)
+        return get_shared_limiter(
+            self.RATE_LIMITER_KEY, calls=calls, period=self.RATE_PERIOD
+        )
 
     async def _get(self, url: str, **kwargs: object):  # type: ignore[override]
         # NCBI throttles bursts; gate concurrency and add minimal spacing between calls.
@@ -80,7 +83,7 @@ class PMCClient(BaseAPIClient):
             resp = await self._get(_ESEARCH_URL, params=search_params)
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
-            logger.error("PMC/PubMed esearch failed: %s", exc)
+            logger.debug("PMC/PubMed esearch failed: %s", exc)
             return []
 
         ids: list[str] = data.get("esearchresult", {}).get("idlist", [])
@@ -97,7 +100,7 @@ class PMCClient(BaseAPIClient):
             sresp = await self._get(_ESUMMARY_URL, params=summary_params)
             sdata = sresp.json()
         except Exception as exc:  # noqa: BLE001
-            logger.error("PMC/PubMed esummary failed: %s", exc)
+            logger.debug("PMC/PubMed esummary failed: %s", exc)
             return []
 
         papers: list[Paper] = []
@@ -184,7 +187,7 @@ class PMCClient(BaseAPIClient):
                 return None
             return FullText(format=FullTextFormat.XML, content=xml_text)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("PMC full-text fetch failed for %s: %s", pmc_id, exc)
+            logger.debug("PMC full-text fetch failed for %s: %s", pmc_id, exc)
             return None
 
     async def _fetch_bioc_xml(self, pmc_id: str) -> Optional[str]:
@@ -196,7 +199,12 @@ class PMCClient(BaseAPIClient):
             xml_text = resp.text.strip()
             # BioC returns short error payloads; require body tag or minimal length
             lower = xml_text.lower()
-            if not xml_text or "<error" in lower or "<body" not in lower or len(xml_text) < 500:
+            if (
+                not xml_text
+                or "<error" in lower
+                or "<body" not in lower
+                or len(xml_text) < 500
+            ):
                 return None
             return xml_text
         except Exception as exc:  # noqa: BLE001

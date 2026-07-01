@@ -4,6 +4,7 @@ Docs:
   https://dev.elsevier.com/documentation/ScienceDirectSearchAPI.wadl
   https://dev.elsevier.com/documentation/ArticleRetrievalAPI.wadl
 """
+
 from __future__ import annotations
 
 import logging
@@ -49,15 +50,15 @@ class ElsevierClient(BaseAPIClient):
             resp = await self._get(_SEARCH_URL, params=params, headers=self._headers())
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
-            logger.error("Elsevier search failed: %s", exc)
+            logger.debug("Elsevier search failed: %s", exc)
             return []
 
-        results = (
-            data.get("search-results", {}).get("entry", [])
-        )
+        results = data.get("search-results", {}).get("entry", [])
         papers: list[Paper] = []
         for item in results:
-            doi = item.get("prism:doi") or item.get("dc:identifier", "").replace("DOI:", "")
+            doi = item.get("prism:doi") or item.get("dc:identifier", "").replace(
+                "DOI:", ""
+            )
             raw_authors = (item.get("authors") or {}).get("author", [])
             if raw_authors:
                 authors = [
@@ -88,7 +89,9 @@ class ElsevierClient(BaseAPIClient):
         if not _settings.elsevier_api_key or not paper.doi:
             return None
         if not _is_elsevier_doi(paper.doi):
-            logger.debug("Skipping Elsevier full-text fetch for non-Elsevier DOI: %s", paper.doi)
+            logger.debug(
+                "Skipping Elsevier full-text fetch for non-Elsevier DOI: %s", paper.doi
+            )
             return None
         url = _ARTICLE_URL.format(doi=paper.doi)
         try:
@@ -98,7 +101,7 @@ class ElsevierClient(BaseAPIClient):
                 return None
             return FullText(format=FullTextFormat.PLAIN, content=text)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Elsevier full-text fetch failed for %s: %s", paper.doi, exc)
+            logger.debug("Elsevier full-text fetch failed for %s: %s", paper.doi, exc)
             return None
 
 
@@ -123,6 +126,6 @@ def _is_elsevier_doi(doi: str) -> bool:
     )
     for pfx in prefixes:
         if normalized.startswith(pfx):
-            normalized = normalized[len(pfx):]
+            normalized = normalized[len(pfx) :]
             break
     return normalized.startswith("10.1016/")

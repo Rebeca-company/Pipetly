@@ -1,4 +1,5 @@
 """Pydantic schemas for query-expansion output."""
+
 from __future__ import annotations
 
 from typing import List
@@ -13,8 +14,8 @@ class ExpandedQuery(BaseModel):
         ...,
         description="One-sentence summary of what the user is looking for.",
     )
-    concept_strings: List[str] = Field(
+    queries: List[str] = Field(
         ...,
         min_length=1,
-        description="Clean keyword strings for OpenAlex/Crossref/Unpaywall.",
+        description="List of concise query strings for literature search APIs.",
     )

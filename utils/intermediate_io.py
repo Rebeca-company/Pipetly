@@ -28,6 +28,7 @@ Usage example (loading)::
     from models.query import ExpandedQuery
     expanded = load_model(STEP1_FILE, ExpandedQuery)
 """
+
 from __future__ import annotations
 
 import json
@@ -49,19 +50,24 @@ INTERMEDIATE_DIR: Path = Path(__file__).resolve().parent.parent / "intermediate_
 # Well-known filenames for each pipeline step
 # ---------------------------------------------------------------------------
 STEP1_FILE = "step1_expanded_query.json"
-STEP2_FILE = "step2_raw_papers.json"            # PaperSearcher  – raw metadata
-STEP3_FILE = "step3_doi_filtered_papers.json"   # MetadataFilter – dedup + DOI
-STEP4_FILE = "step4_fulltext_raw_papers.json"   # FullTextRetriever – raw PDF/XML/HTML
-STEP5_FILE = "step5_fulltext_clean_papers.json" # TextExtractor  – clean plain text
-STEP6_FILE = "step6_fulltext_filtered_papers.json" # FullTextFilter – accepted length range
-STEP7_FILE = "step7_protocols.json"             # Step 7 protocol extraction output
-STEP8_FILE = "step8_scored_protocols.json"      # ProtocolScorer output
-TEST_LLM_TOKEN_USAGE_FILE = "test_llm_token_usage.json"  # Testing telemetry for LLM token usage
+STEP2_FILE = "step2_raw_papers.json"  # PaperSearcher  – raw metadata
+STEP3_FILE = "step3_doi_filtered_papers.json"  # MetadataFilter – dedup + DOI
+STEP4_FILE = "step4_fulltext_raw_papers.json"  # FullTextRetriever – raw PDF/XML/HTML
+STEP5_FILE = "step5_fulltext_clean_papers.json"  # TextExtractor  – clean plain text
+STEP6_FILE = (
+    "step6_fulltext_filtered_papers.json"  # FullTextFilter – accepted length range
+)
+STEP7_FILE = "step7_protocols.json"  # Step 7 protocol extraction output
+STEP8_FILE = "step8_scored_protocols.json"  # ProtocolScorer output
+TEST_LLM_TOKEN_USAGE_FILE = (
+    "test_llm_token_usage.json"  # Testing telemetry for LLM token usage
+)
 
 
 # ---------------------------------------------------------------------------
 # Core helpers
 # ---------------------------------------------------------------------------
+
 
 def ensure_intermediate_dir() -> Path:
     """Create ``intermediate_outputs/`` if it does not exist and return its path."""
@@ -82,18 +88,20 @@ def save_json(data: Any, filename: str) -> Path:
     """
     ensure_intermediate_dir()
     path = INTERMEDIATE_DIR / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     if isinstance(data, list):
         serialised: Any = [
-            item.model_dump() if isinstance(item, BaseModel) else item
-            for item in data
+            item.model_dump() if isinstance(item, BaseModel) else item for item in data
         ]
     elif isinstance(data, BaseModel):
         serialised = data.model_dump()
     else:
         serialised = data
 
-    path.write_text(json.dumps(serialised, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(
+        json.dumps(serialised, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     logger.info("Intermediate output saved → %s", path)
     return path
 
@@ -125,6 +133,7 @@ def load_model_list(filename: str, model: Type[T]) -> List[T]:
 # ---------------------------------------------------------------------------
 # Internal
 # ---------------------------------------------------------------------------
+
 
 def _require_file(filename: str) -> Path:
     """Return ``intermediate_outputs/<filename>`` or raise :class:`FileNotFoundError`."""

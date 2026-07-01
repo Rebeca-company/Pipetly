@@ -2,6 +2,7 @@
 
 Docs: https://europepmc.org/RestfulWebService
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,7 +35,7 @@ class EuropePMCClient(BaseAPIClient):
             resp = await self._get(_SEARCH_URL, params=params)
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
-            logger.error("EuropePMC search failed: %s", exc)
+            logger.debug("EuropePMC search failed: %s", exc)
             return []
 
         papers: list[Paper] = []
@@ -103,7 +104,7 @@ class EuropePMCClient(BaseAPIClient):
                 return None
             return FullText(format=FullTextFormat.XML, content=xml_text)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("EuropePMC full-text fetch failed for %s: %s", pmc_id, exc)
+            logger.debug("EuropePMC full-text fetch failed for %s: %s", pmc_id, exc)
         return None
 
 

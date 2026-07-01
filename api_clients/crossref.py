@@ -2,6 +2,7 @@
 
 Docs: https://api.crossref.org/swagger-ui/index.html
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,7 +31,9 @@ class CrossRefClient(BaseAPIClient):
     @staticmethod
     def _is_component_title(title: str) -> bool:
         """Return True for titles that look like components (figures, supplements)."""
-        pattern = re.compile(r"\b(figure|table|supplement|peer review report|video)\b", re.IGNORECASE)
+        pattern = re.compile(
+            r"\b(figure|table|supplement|peer review report|video)\b", re.IGNORECASE
+        )
         return bool(pattern.search(title))
 
     async def search(self, query: str, max_results: int = 10) -> List[Paper]:
@@ -43,7 +46,7 @@ class CrossRefClient(BaseAPIClient):
             resp = await self._get(_SEARCH_URL, params=params, headers=self._headers())
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
-            logger.error("CrossRef search failed: %s", exc)
+            logger.debug("CrossRef search failed: %s", exc)
             return []
 
         papers: list[Paper] = []
@@ -83,7 +86,7 @@ class CrossRefClient(BaseAPIClient):
             resp = await self._get(url, headers=self._headers())
             item = resp.json().get("message", {})
         except Exception as exc:  # noqa: BLE001
-            logger.warning("CrossRef DOI resolution failed for %s: %s", doi, exc)
+            logger.debug("CrossRef DOI resolution failed for %s: %s", doi, exc)
             return None
 
         titles = item.get("title", [])

@@ -1,4 +1,5 @@
 """Token-bucket rate limiter for async HTTP clients."""
+
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +33,9 @@ class RateLimiter:
         while True:
             async with self._lock:
                 now = time.monotonic()
-                self._timestamps = [t for t in self._timestamps if now - t < self.period]
+                self._timestamps = [
+                    t for t in self._timestamps if now - t < self.period
+                ]
                 cooldown_wait = max(0.0, self._blocked_until - now)
 
                 window_wait = 0.0

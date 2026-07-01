@@ -1,4 +1,4 @@
-﻿<mxfile host="Electron" modified="2026-02-26T00:00:00.000Z" agent="GitHub Copilot" version="21.0.0" type="device">
+<mxfile host="Electron" modified="2026-02-26T00:00:00.000Z" agent="GitHub Copilot" version="21.0.0" type="device">
   <diagram id="pipetly-pipeline" name="Pipetly Pipeline Architecture">
     <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2900" pageHeight="1700" math="0" shadow="0">
       <root>
@@ -53,14 +53,14 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
-        <!-- STEP 2: MultiSourceOrchestrator -->
+        <!-- STEP 2: PaperSearcher -->
         <mxCell id="300" value="Step 2 – Multi-Source Orchestration" style="swimlane;startSize=34;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;arcSize=4;" vertex="1" parent="1">
           <mxGeometry x="510" y="60" width="340" height="640" as="geometry" />
         </mxCell>
-        <mxCell id="301" value="processors/orchestrator.py" style="text;html=1;align=center;strokeColor=none;fillColor=none;fontSize=10;fontStyle=2;fontColor=#555555;" vertex="1" parent="300">
+        <mxCell id="301" value="processors/02_paper_searcher.py" style="text;html=1;align=center;strokeColor=none;fillColor=none;fontSize=10;fontStyle=2;fontColor=#555555;" vertex="1" parent="300">
           <mxGeometry x="10" y="32" width="320" height="18" as="geometry" />
         </mxCell>
-        <mxCell id="302" value="&lt;b&gt;MultiSourceOrchestrator&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="300">
+        <mxCell id="302" value="&lt;b&gt;PaperSearcher&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="300">
           <mxGeometry x="20" y="56" width="300" height="34" as="geometry" />
         </mxCell>
         <mxCell id="303" value="&lt;b&gt;fetch_papers&lt;/b&gt;(expanded_query: ExpandedQuery) → List[Paper]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffacd;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="300">
@@ -164,10 +164,10 @@
         <mxCell id="503" value="&lt;b&gt;extract&lt;/b&gt;(paper: Paper) → Optional[ExtractedProtocol]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffacd;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="500">
           <mxGeometry x="20" y="100" width="335" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="504" value="&lt;b&gt;_call_gemini&lt;/b&gt;(text, system_prompt) → Optional[ExtractedProtocol]&lt;br/&gt;System: protocol extraction engine&lt;br/&gt;Temp: 0.1 | json_schema mode&lt;br/&gt;Schema: extracted_protocol&lt;br/&gt;Truncates to 120 000 chars" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="500">
+        <mxCell id="504" value="&lt;b&gt;_call_llm&lt;/b&gt;(text, system_prompt) → Optional[ExtractedProtocol]&lt;br/&gt;System: protocol extraction engine&lt;br/&gt;Temp: 0.1 | json_schema mode&lt;br/&gt;Schema: extracted_protocol&lt;br/&gt;Truncates to 120 000 chars" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="500">
           <mxGeometry x="20" y="152" width="335" height="115" as="geometry" />
         </mxCell>
-        <mxCell id="505" value="&lt;b&gt;_investigate_citations&lt;/b&gt;(protocol, depth)&lt;br/&gt;Recursive · max_citation_depth = 3&lt;br/&gt;&lt;br/&gt;1. _parse_doi_from_bibliography(raw_bib, key)&lt;br/&gt;   Regex heuristic: [N] → DOI extraction&lt;br/&gt;2. _fetch_cited_paper(doi)&lt;br/&gt;   Try EuropePMC / SemanticScholar&lt;br/&gt;3. _call_gemini() on cited paper text&lt;br/&gt;4. _merge_cited_steps(protocol, key, cited)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;" vertex="1" parent="500">
+        <mxCell id="505" value="&lt;b&gt;_investigate_citations&lt;/b&gt;(protocol, depth)&lt;br/&gt;Recursive · max_citation_depth = 3&lt;br/&gt;&lt;br/&gt;1. _parse_doi_from_bibliography(raw_bib, key)&lt;br/&gt;   Regex heuristic: [N] → DOI extraction&lt;br/&gt;2. _fetch_cited_paper(doi)&lt;br/&gt;   Try EuropePMC / SemanticScholar&lt;br/&gt;3. _call_llm() on cited paper text&lt;br/&gt;4. _merge_cited_steps(protocol, key, cited)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;" vertex="1" parent="500">
           <mxGeometry x="20" y="278" width="335" height="175" as="geometry" />
         </mxCell>
         <mxCell id="506" value="&lt;b&gt;ProtocolStep schema:&lt;/b&gt;&lt;br/&gt;step_number · description&lt;br/&gt;reagents[] · equipment[]&lt;br/&gt;duration · notes · citation_ref" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#999999;fontSize=10;" vertex="1" parent="500">
@@ -200,7 +200,7 @@
         <mxCell id="604" value="asyncio.gather(*tasks)&lt;br/&gt;Parallel scoring of all protocols" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="600">
           <mxGeometry x="20" y="153" width="270" height="46" as="geometry" />
         </mxCell>
-        <mxCell id="605" value="&lt;b&gt;_score_one&lt;/b&gt;(protocol, intent) → ScoredProtocol&lt;br/&gt;LLM: Gemini 2.5 Flash | Temp: 0.0&lt;br/&gt;System: expert protocol reviewer&lt;br/&gt;Scoring rubric:&lt;br/&gt;1.0 = Perfect match&lt;br/&gt;0.7 = Good match&lt;br/&gt;0.4 = Partial match&lt;br/&gt;0.0 = Not relevant&lt;br/&gt;Schema: protocol_score" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="600">
+        <mxCell id="605" value="&lt;b&gt;_score_one&lt;/b&gt;(protocol, intent) → ScoredProtocol&lt;br/&gt;LLM: Configured LLM | Temp: 0.0&lt;br/&gt;System: expert protocol reviewer&lt;br/&gt;Scoring rubric:&lt;br/&gt;1.0 = Perfect match&lt;br/&gt;0.7 = Good match&lt;br/&gt;0.4 = Partial match&lt;br/&gt;0.0 = Not relevant&lt;br/&gt;Schema: protocol_score" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="600">
           <mxGeometry x="20" y="210" width="270" height="165" as="geometry" />
         </mxCell>
         <mxCell id="606" value="Sort by score DESC&lt;br/&gt;Return top_k_protocols = 3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="600">
@@ -235,7 +235,7 @@
         </mxCell>
 
         <!-- SHARED LLM -->
-        <mxCell id="800" value="&lt;b&gt;LLM: google/gemini-2.5-flash&lt;/b&gt;&lt;br/&gt;via OpenRouter API&lt;br/&gt;Auth: OPENROUTER_API_KEY&lt;br/&gt;Base URL: openrouter.ai/api/v1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+        <mxCell id="800" value="&lt;b&gt;LLM: your/model-name&lt;/b&gt;&lt;br/&gt;via OpenRouter API&lt;br/&gt;Auth: OPENROUTER_API_KEY&lt;br/&gt;Base URL: openrouter.ai/api/v1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
           <mxGeometry x="882" y="810" width="290" height="90" as="geometry" />
         </mxCell>
         <!-- LLM to Step 1 dashed -->
@@ -305,7 +305,7 @@
         <mxCell id="962" value="Method / Function" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffacd;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="960">
           <mxGeometry x="155" y="30" width="130" height="28" as="geometry" />
         </mxCell>
-        <mxCell id="963" value="LLM Call (Gemini)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="960">
+        <mxCell id="963" value="LLM Call" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="960">
           <mxGeometry x="300" y="30" width="148" height="28" as="geometry" />
         </mxCell>
         <mxCell id="964" value="Processing Step / Filter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="960">

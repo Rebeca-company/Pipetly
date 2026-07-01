@@ -2,6 +2,7 @@
 
 Docs: https://api.semanticscholar.org/api-docs/
 """
+
 from __future__ import annotations
 
 import logging
@@ -51,7 +52,9 @@ class SemanticScholarClient(BaseAPIClient):
 
     def _init_rate_limiter(self):
         calls = 5 if _settings.semantic_scholar_api_key else 1
-        return get_shared_limiter(self.RATE_LIMITER_KEY, calls=calls, period=self.RATE_PERIOD)
+        return get_shared_limiter(
+            self.RATE_LIMITER_KEY, calls=calls, period=self.RATE_PERIOD
+        )
 
     def _headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}
@@ -69,7 +72,7 @@ class SemanticScholarClient(BaseAPIClient):
             resp = await self._get(_SEARCH_URL, params=params, headers=self._headers())
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
-            logger.error("SemanticScholar search failed: %s", exc)
+            logger.debug("SemanticScholar search failed: %s", exc)
             return []
 
         papers: list[Paper] = []
@@ -106,9 +109,13 @@ class SemanticScholarClient(BaseAPIClient):
                     headers=self._headers(),
                 )
                 data = resp.json()
-                candidate_url = (data.get("openAccessPdf") or {}).get("url") or data.get("url")
+                candidate_url = (data.get("openAccessPdf") or {}).get(
+                    "url"
+                ) or data.get("url")
             except Exception as exc:  # noqa: BLE001
-                logger.debug("SemanticScholar DOI lookup failed for %s: %s", paper.doi, exc)
+                logger.debug(
+                    "SemanticScholar DOI lookup failed for %s: %s", paper.doi, exc
+                )
 
             # Fallback: search endpoint can still return a usable OA URL when DOI lookup misses.
             if not candidate_url:
@@ -121,9 +128,15 @@ class SemanticScholarClient(BaseAPIClient):
                     results = sresp.json().get("data", [])
                     if results:
                         item = results[0]
-                        candidate_url = (item.get("openAccessPdf") or {}).get("url") or item.get("url")
+                        candidate_url = (item.get("openAccessPdf") or {}).get(
+                            "url"
+                        ) or item.get("url")
                 except Exception as exc:  # noqa: BLE001
-                    logger.debug("SemanticScholar DOI search fallback failed for %s: %s", paper.doi, exc)
+                    logger.debug(
+                        "SemanticScholar DOI search fallback failed for %s: %s",
+                        paper.doi,
+                        exc,
+                    )
 
         # Only fall back to the stored URL when it came from Semantic Scholar
         if not candidate_url and paper.source == "semantic_scholar":
@@ -157,14 +170,18 @@ class SemanticScholarClient(BaseAPIClient):
 
             head = text[:3000].lower().lstrip()
             is_html = head.startswith("<") and ("<html" in head or "<!doctype" in head)
-            plain_len = len(_strip_tags_and_normalise(text)) if is_html else len(_collapse_ws(text))
+            plain_len = (
+                len(_strip_tags_and_normalise(text))
+                if is_html
+                else len(_collapse_ws(text))
+            )
             if _looks_like_preview(text, plain_len):
                 return None
 
             fmt = FullTextFormat.HTML if is_html else FullTextFormat.PLAIN
             return FullText(format=fmt, content=text)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("SemanticScholar full-text fetch failed: %s", exc)
+            logger.debug("SemanticScholar full-text fetch failed: %s", exc)
             return None
 
 

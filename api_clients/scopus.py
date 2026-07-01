@@ -7,6 +7,7 @@ client.
 Docs:
   https://dev.elsevier.com/documentation/SCOPUSSearchAPI.wadl
 """
+
 from __future__ import annotations
 
 import logging
@@ -48,7 +49,7 @@ class ScopusClient(BaseAPIClient):
             resp = await self._get(_SEARCH_URL, params=params, headers=self._headers())
             data = resp.json()
         except Exception as exc:  # noqa: BLE001
-            logger.error("Scopus search failed: %s", exc)
+            logger.debug("Scopus search failed: %s", exc)
             return []
 
         results = data.get("search-results", {}).get("entry", [])

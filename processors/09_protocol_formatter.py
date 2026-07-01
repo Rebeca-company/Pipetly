@@ -3,10 +3,10 @@
 Keeps the top protocols by relevance_score and writes a Markdown report for the
 user. Protocol step wording is drafted by the LLM; metadata is composed in code.
 """
+
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from datetime import datetime
@@ -17,6 +17,7 @@ import httpx
 
 from config import get_settings
 from models.protocol import ExtractedProtocol, InheritedReference, ScoredProtocol
+from utils.llm_client import BaseLLMProcessor
 
 logger = logging.getLogger(__name__)
 _s = get_settings()
@@ -37,39 +38,14 @@ Rules for Drafting the Output:
 - **Citations:** Add inline citations for supplementarry protocols using [{doi}](https://doi.org/{doi})]. Place the citation at the end of the specific step it relates to.
 """
 
-_FORMAT_SCHEMA: dict = {
-    "name": "protocol_markdown_steps",
-    "strict": True,
-    "schema": {
-        "type": "object",
-        "properties": {
-            "steps_markdown": {"type": "string"}
-        },
-        "required": ["steps_markdown"],
-        "additionalProperties": False,
-    },
-}
 
-
-class ProtocolFormatter:
+class ProtocolFormatter(BaseLLMProcessor):
     """Select top protocols and generate final user-facing markdown output."""
 
     def __init__(self, max_concurrent_drafts: int = _s.llm_max_concurrent) -> None:
-        self._base = _s.openrouter_base_url.rstrip("/")
-        self._headers = {
-            "Authorization": f"Bearer {_s.openrouter_api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/pipetly",
-            "X-Title": "Pipetly",
-        }
+        super().__init__("9")
         self._draft_semaphore = asyncio.Semaphore(max_concurrent_drafts)
         self._http_client: Optional[httpx.AsyncClient] = None
-        self._llm_token_events: list[dict[str, int | str]] = []
-        self._llm_call_count = 0
-
-    def get_llm_token_events(self) -> list[dict[str, int | str]]:
-        """Return per-call token telemetry records for Step 9 formatting."""
-        return list(self._llm_token_events)
 
     async def format_top_protocols(
         self,
@@ -88,7 +64,9 @@ class ProtocolFormatter:
 
         packaged.sort(key=lambda sp: sp.score, reverse=True)
         top_k = packaged[: _s.top_k_protocols]
-        logger.info("Packaged %d protocols; returning Top %d.", len(packaged), len(top_k))
+        logger.info(
+            "Packaged %d protocols; returning Top %d.", len(packaged), len(top_k)
+        )
         return top_k
 
     async def format_and_write(
@@ -98,7 +76,6 @@ class ProtocolFormatter:
         output_dir: str | None = None,
     ) -> Path:
         """Select top protocols, draft steps with LLM, and write markdown report."""
-        logger.info("Step 9 start - Final formatting on %d protocols.", len(protocols))
         self._llm_token_events.clear()
         self._llm_call_count = 0
         top_protocols = await self.format_top_protocols(protocols)
@@ -133,12 +110,16 @@ class ProtocolFormatter:
             await self._http_client.aclose()
             self._http_client = None
 
-        for rank, (sp, draft_result) in enumerate(zip(top_protocols, draft_results), start=1):
+        for rank, (sp, draft_result) in enumerate(
+            zip(top_protocols, draft_results), start=1
+        ):
             p = sp.protocol
             lines.append(f"## Rank {rank} — Protocol")
             lines.append(f"**Source:** {p.source_title}")
             if p.source_doi:
-                lines.append(f"\n**DOI:** [{p.source_doi}](https://doi.org/{p.source_doi})")
+                lines.append(
+                    f"\n**DOI:** [{p.source_doi}](https://doi.org/{p.source_doi})"
+                )
             lines.append(f"\n**Relevance score:** {sp.score:.1f}/100")
             lines.append("")
 
@@ -148,7 +129,9 @@ class ProtocolFormatter:
                     p.source_title[:100],
                     draft_result,
                 )
-                drafted_steps = "1. " + p.protocol_text.strip().replace("\n", " ")[:1000]
+                drafted_steps = (
+                    "1. " + p.protocol_text.strip().replace("\n", " ")[:1000]
+                )
             else:
                 drafted_steps = draft_result
 
@@ -158,7 +141,9 @@ class ProtocolFormatter:
 
             if p.inherited_references:
                 lines.append("### Inherited References\n")
-                lines.append("\nThese are references cited by this protocol that were resolved.")
+                lines.append(
+                    "\nThese are references cited by this protocol that were resolved."
+                )
                 refs = []
                 seen = set()
                 for ref in p.inherited_references:
@@ -174,13 +159,14 @@ class ProtocolFormatter:
                 else:
                     for ctx, doi in refs:
                         lines.append(f"- **{intent}**")
-                        lines.append(f"\n  Extracted from: [{doi}](https://doi.org/{doi})")
+                        lines.append(
+                            f"\n  Extracted from: [{doi}](https://doi.org/{doi})"
+                        )
                 lines.append("")
                 lines.append("---\n")
 
         filepath.write_text("\n".join(lines), encoding="utf-8")
         logger.info("Markdown report written to: %s", filepath)
-        logger.info("Step 9 complete - Final report generated.")
         return filepath
 
     async def _draft_steps_with_semaphore(
@@ -224,17 +210,21 @@ class ProtocolFormatter:
 
             citation = self._reference_citation(ref)
             depth = getattr(ref, "resolution_depth", 1) or 1
-            
+
             block = (
                 f"### [Level {depth}] Supplementary Protocol\n"
                 f"**Citation:** {citation}\n"
-                f"**Trigger Context (Look for this phrase in Level {depth - 1}):** \"{context}\"\n"
+                f'**Trigger Context (Look for this phrase in Level {depth - 1}):** "{context}"\n'
                 f"**Protocol Text:**\n{resolved}\n"
             )
-            
+
             nested_blocks.append(block)
 
-        nested_protocols_str = "\n\n".join(nested_blocks) if nested_blocks else "No supplementary nested protocols provided."
+        nested_protocols_str = (
+            "\n\n".join(nested_blocks)
+            if nested_blocks
+            else "No supplementary nested protocols provided."
+        )
         user_prompt = (
             f"Research intent:\n{intent}\n\n"
             "Protocol source text:\n"
@@ -243,13 +233,12 @@ class ProtocolFormatter:
             f"{nested_protocols_str}"
         )
         payload: dict[str, Any] = {
-            "model": _s.gemini_model_general,
+            "model": _s.llm_model_general,
             "messages": [
                 {"role": "system", "content": _FORMAT_SYSTEM},
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.0,
-            "response_format": {"type": "json_schema", "json_schema": _FORMAT_SCHEMA},
         }
 
         try:
@@ -272,59 +261,28 @@ class ProtocolFormatter:
                 resp.raise_for_status()
             raw_payload = resp.json()
             self._record_llm_usage(raw_payload)
-            raw = raw_payload["choices"][0]["message"]["content"]
-            data = json.loads(raw)
-            md = data.get("steps_markdown", "").strip()
-            return md or "1. (No protocol steps available)"
+            md = raw_payload["choices"][0]["message"]["content"]
+            if isinstance(md, list):
+                md = "".join(
+                    part.get("text", "") if isinstance(part, dict) else str(part)
+                    for part in md
+                )
+            return md.strip() or "1. (No protocol steps available)"
         except Exception as exc:  # noqa: BLE001
             logger.warning("LLM step drafting failed; using fallback: %s", exc)
             # Safe fallback to avoid empty output when LLM fails.
             return "1. " + protocol_text.strip().replace("\n", " ")[:1000]
 
-    def _record_llm_usage(self, response_json: dict[str, Any]) -> None:
-        usage = response_json.get("usage") or {}
-
-        in_tokens = int(
-            usage.get("prompt_tokens")
-            or usage.get("input_tokens")
-            or usage.get("promptTokens")
-            or 0
-        )
-        out_tokens = int(
-            usage.get("completion_tokens")
-            or usage.get("output_tokens")
-            or usage.get("completionTokens")
-            or 0
-        )
-        total_tokens = int(usage.get("total_tokens") or (in_tokens + out_tokens))
-
-        self._llm_call_count += 1
-        event: dict[str, int | str] = {
-            "step": "9",
-            "call_index": self._llm_call_count,
-            "input_tokens": in_tokens,
-            "output_tokens": out_tokens,
-            "total_tokens": total_tokens,
-        }
-        self._llm_token_events.append(event)
-
-        logger.info(
-            "LLM step 9 tokens (call %d) - in=%d out=%d total=%d",
-            self._llm_call_count,
-            in_tokens,
-            out_tokens,
-            total_tokens,
-        )
-
 
 if __name__ == "__main__":
     import asyncio
+    from utils.logger import set_stage_logger, setup_logging
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    setup_logging()
+    set_stage_logger("step9_final_formatting")
+
+    from config import get_settings
+    from utils.telemetry import log_standalone_telemetry
 
     from models.query import ExpandedQuery
     from utils.intermediate_io import (
@@ -335,16 +293,23 @@ if __name__ == "__main__":
     )
 
     async def _main() -> None:
-        print("[Step 9] START | Final Formatting and Output")
+        logger.info("[Step 9] START | Final Formatting and Output")
         intent = load_model(STEP1_FILE, ExpandedQuery).intent
         protocols = load_model_list(STEP8_FILE, ExtractedProtocol)
         formatter = ProtocolFormatter()
         top = await formatter.format_top_protocols(protocols)
         for item in top:
-            print(f"  [{item.score:.1f}] {item.protocol.source_title[:70]}")
+            logger.info("  [%.1f] %s", item.score, item.protocol.source_title[:70])
         md_path = await formatter.format_and_write(protocols, intent)
-        print(
-            f"[Step 9] DONE | candidates={len(protocols)} top_k={len(top)} | Output: {md_path}"
+        logger.info(
+            "[Step 9] DONE | candidates=%d top_k=%d | Output: %s",
+            len(protocols),
+            len(top),
+            md_path,
         )
+
+        events = formatter.get_llm_token_events()
+        _s = get_settings()
+        await log_standalone_telemetry(events, _s.llm_model_general, "protocol_formatter")
 
     asyncio.run(_main())
