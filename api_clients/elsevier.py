@@ -54,24 +54,38 @@ class ElsevierClient(BaseAPIClient):
             return []
 
         results = data.get("search-results", {}).get("entry", [])
+        if isinstance(results, dict):
+            results = [results]
+
         papers: list[Paper] = []
         for item in results:
-            doi = item.get("prism:doi") or item.get("dc:identifier", "").replace(
-                "DOI:", ""
-            )
+            if not isinstance(item, dict):
+                continue
+                
+            doi = item.get("prism:doi") or item.get("dc:identifier", "").replace("DOI:", "")
+            
             raw_authors = (item.get("authors") or {}).get("author", [])
-            if raw_authors:
+            if isinstance(raw_authors, dict):
+                raw_authors = [raw_authors]
+                
+            if raw_authors and isinstance(raw_authors, list):
                 authors = [
                     (
                         f"{a.get('given-name', '')} {a.get('surname', '')}".strip()
                         or a.get("$", "")
                     ).strip()
                     for a in raw_authors
-                    if a.get("given-name") or a.get("surname") or a.get("$")
+                    if isinstance(a, dict) and (a.get("given-name") or a.get("surname") or a.get("$"))
                 ]
             else:
                 creator = item.get("dc:creator", "")
                 authors = [creator] if creator else []
+                
+            raw_links = item.get("link", [])
+            if isinstance(raw_links, dict):
+                raw_links = [raw_links]
+            url = raw_links[0].get("@href") if raw_links and isinstance(raw_links, list) and isinstance(raw_links[0], dict) else None
+
             papers.append(
                 Paper(
                     doi=doi or None,
@@ -80,7 +94,7 @@ class ElsevierClient(BaseAPIClient):
                     abstract=item.get("dc:description"),
                     year=_year_from_date(item.get("prism:coverDate")),
                     source="elsevier",
-                    url=item.get("link", [{}])[0].get("@href"),
+                    url=url,
                 )
             )
         return papers

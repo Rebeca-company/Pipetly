@@ -22,6 +22,30 @@ from utils.rate_limiter import RateLimiter, get_shared_limiter
 logger = logging.getLogger(__name__)
 _settings = get_settings()
 
+# Domains that are known to be unreachable or to always return paywalled/broken
+# content. Requests whose final URL lands on one of these will be aborted early.
+_BLOCKED_HOSTS: frozenset[str] = frozenset({
+    "springerreference.com",
+    "www.springerreference.com",
+    "radiopaedia.org",  # returns 406 for API clients
+})
+
+def _host_is_blocked(url: str) -> bool:
+    """Return True if *url* resolves to a known-broken host."""
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(url).hostname or ""
+        return any(host == b or host.endswith("." + b) for b in _BLOCKED_HOSTS)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+class BlockedHostError(httpx.RequestError):
+    """Raised when a request targets or redirects to a known-broken host.
+
+    Unlike a generic RequestError, this error is never retried — the domain is
+    known to be unreachable or unusable so retrying would only waste time.
+    """
 
 def clean_title(raw: Optional[str]) -> str:
     """Return a plain-text, whitespace-normalised title.
@@ -67,8 +91,19 @@ class BaseAPIClient(ABC):
         self._client = httpx.AsyncClient(
             timeout=_settings.http_timeout,
             follow_redirects=True,
+            event_hooks={"response": [self._check_redirect_host]},
         )
         return self
+
+    @staticmethod
+    async def _check_redirect_host(response: httpx.Response) -> None:
+        """Event hook: abort before following a redirect to a blocked host."""
+        if response.is_redirect:
+            location = response.headers.get("location", "")
+            if location and _host_is_blocked(location):
+                raise BlockedHostError(
+                    f"Blocked host after redirect – skipping {location}"
+                )
 
     async def __aexit__(self, *_: object) -> None:
         if self._client:
@@ -120,6 +155,8 @@ class BaseAPIClient(ABC):
     async def _get(self, url: str, **kwargs: object) -> httpx.Response:
         """Rate-limited GET with exponential-backoff retry and timing instrumentation."""
         assert self._client is not None, "Use client as async context manager."
+        if _host_is_blocked(url):
+            raise BlockedHostError(f"Blocked host – skipping {url}")
         if self._first_request:
             self._first_request = False
             if self.STARTUP_JITTER_MAX > 0:
@@ -130,6 +167,9 @@ class BaseAPIClient(ABC):
         for attempt in range(1, _settings.http_max_retries + 1):
             try:
                 resp = await self._client.get(url, **kwargs)  # type: ignore[arg-type]
+                # Abort if a redirect led us to a blocked host (fallback check)
+                if _host_is_blocked(str(resp.url)):
+                    raise BlockedHostError(f"Blocked host after redirect – skipping {resp.url}")
                 resp.raise_for_status()
                 elapsed_ms = (_time.monotonic() - t0) * 1000
                 self._request_stats.append(
@@ -176,6 +216,17 @@ class BaseAPIClient(ABC):
                 raise
             except httpx.RequestError as exc:
                 last_exc = exc
+                # BlockedHostError is non-retryable: abort immediately.
+                if isinstance(exc, BlockedHostError):
+                    elapsed_ms = (_time.monotonic() - t0) * 1000
+                    self._request_stats.append(
+                        {
+                            "url": url,
+                            "response_time_ms": round(elapsed_ms, 1),
+                            "is_error": True,
+                        }
+                    )
+                    raise
                 if attempt < _settings.http_max_retries:
                     wait = self._compute_backoff(attempt)
                     logger.debug(

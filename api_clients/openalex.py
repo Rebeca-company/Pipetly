@@ -13,7 +13,7 @@ from typing import List, Optional
 import base64
 
 from models.paper import FullText, FullTextFormat, Paper
-from .base import BaseAPIClient, clean_title
+from .base import BaseAPIClient, clean_title, _host_is_blocked
 
 logger = logging.getLogger(__name__)
 
@@ -84,12 +84,7 @@ class OpenAlexClient(BaseAPIClient):
         return papers
 
     async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
-        """Find the OA URL via DOI lookup, then download the content.
-
-        For papers from any source, performs a DOI-based lookup against
-        OpenAlex to discover an open-access URL.  Falls back to the stored
-        ``paper.url`` only for papers already sourced from OpenAlex.
-        """
+        """Find the OA URL via DOI lookup, then download the content."""
         oa_url: Optional[str] = None
         candidates: list[str] = []
 
@@ -109,10 +104,10 @@ class OpenAlexClient(BaseAPIClient):
         if paper.source == "openalex" and paper.url:
             candidates.append(paper.url)
 
-        # Keep order stable while removing duplicates.
+        # Keep order stable while removing duplicates, skip known-broken hosts.
         unique_candidates: list[str] = []
         for url in candidates:
-            if url and url not in unique_candidates:
+            if url and url not in unique_candidates and not _host_is_blocked(url):
                 unique_candidates.append(url)
 
         if not unique_candidates:

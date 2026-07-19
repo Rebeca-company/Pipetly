@@ -41,11 +41,14 @@ venv.bak/
 
 # ── Secrets ───────────────────────────────────────────────────────────────────
 .env
+.env.local
+.env.*.local
 .envrc
 
 # ── Pipetly generated output ──────────────────────────────────────────────────
 output/
 intermediate_outputs/
+*.log
 
 # ── Unit test / coverage reports ─────────────────────────────────────────────
 htmlcov/
@@ -66,6 +69,7 @@ cover/
 .ipynb_checkpoints
 profile_default/
 ipython_config.py
+notebooks/old/
 
 # ── Type checkers ─────────────────────────────────────────────────────────────
 .mypy_cache/
@@ -102,14 +106,35 @@ cython_debug/
 .abstra/
 .pypirc
 .pybuilder/
-.pdm-build/
 /site
 
 # ── Editor / IDE ──────────────────────────────────────────────────────────────
-# Uncomment if you want to ignore VS Code workspace settings:
-# .vscode/
+.vscode/
 .cursorignore
 .cursorindexingignore
 .ropeproject
 .spyderproject
 .spyproject
+
+# ── OS artefacts ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Evaluation output ─────────────────────────────────────────────────────────
+# OpenRouter activity CSVs (contain private account data, never commit)
+openrouter_activity_*.csv
+evaluation/openrouter_activity_*.csv
+
+# Intermediate pipeline step files inside benchmark runs.
+# These are large (up to ~65 MB per run) and fully reproducible.
+# To regenerate: run  python evaluation/scripts/run_evaluations.py
+# Individual files: step1_expanded_query.json … step8_scored_protocols.json
+evaluation/runs/*/intermediate_steps/
+evaluation/runs/*/telemetry/
+
+# Judge output — timestamped JSON + Markdown reports, reproducible via llm_judge.py
+evaluation/results/
+
+# One-shot reorganisation helper (already executed, kept for reference only)
+evaluation/_reorg.py

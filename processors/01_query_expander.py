@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time as _time
 from typing import Any
 
 import httpx
@@ -32,6 +33,7 @@ Given a description of an experimental technique or research need, generate opti
 - Do not broaden or narrow scope beyond what the user asked.
 - If information is missing, keep the intent minimal rather than inventing content.
 - Preserve key entities exactly when possible (targets, diseases, organisms, techniques).
+- Target specific scope: Capture the exact procedural boundaries requested.
 
 ## Query construction rules
 - 2-5 terms per string; no operators and no full sentences.
@@ -48,6 +50,8 @@ Given a description of an experimental technique or research need, generate opti
 - Do not add methodological terms (e.g., "protocol", "assay", "experiment").
 - Do not add study-type terms (e.g., "study", "analysis", "investigation", "research", "review"); these are noise, not signal.
 - Do not add generic scientific verbs (e.g., "role of", "effect of", "impact of") unless they are part of an established technical term.
+- Ignore any meta-instructions regarding formatting or output structure (e.g., "flat list format", "chronological order", "step-by-step"). These are NOT search terms.
+- Ignore generic role-playing instructions (e.g., "As a specialist in...", "As an expert in..."). Focus strictly on the underlying experimental task.
 """
 
 _EXPANDED_QUERY_SCHEMA: dict = {
@@ -90,17 +94,19 @@ class QueryExpander(BaseLLMProcessor):
             },
         }
         async with httpx.AsyncClient(timeout=_s.http_timeout) as client:
+            _t0 = _time.monotonic()
             resp = await client.post(
                 f"{self._base}/chat/completions",
                 json=payload,
                 headers=self._headers,
             )
+            _gen_ms = (_time.monotonic() - _t0) * 1000
             if resp.is_error:
                 logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
                 resp.raise_for_status()
 
         raw_payload = resp.json()
-        self._record_llm_usage(raw_payload)
+        self._record_llm_usage(raw_payload, generation_time_ms=_gen_ms)
         raw_content: str = (
             raw_payload.get("choices", [{}])[0].get("message", {}).get("content", "{}")
         )

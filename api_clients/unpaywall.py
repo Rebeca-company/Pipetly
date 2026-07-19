@@ -18,7 +18,7 @@ import base64
 
 from config import get_settings
 from models.paper import FullText, FullTextFormat, Paper
-from .base import BaseAPIClient
+from .base import BaseAPIClient, _host_is_blocked
 
 logger = logging.getLogger(__name__)
 _settings = get_settings()
@@ -46,8 +46,7 @@ class UnpaywallClient(BaseAPIClient):
         return []
 
     async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
-        """
-        Look up the DOI in Unpaywall and download the best open-access PDF.
+        """Look up the DOI in Unpaywall and download the best open-access PDF.
 
         Requires ``UNPAYWALL_EMAIL`` to be set in the environment / .env file.
         """
@@ -74,7 +73,8 @@ class UnpaywallClient(BaseAPIClient):
 
         def _push(url: Optional[str]) -> None:
             if url and url not in candidates:
-                candidates.append(url)
+                if not _host_is_blocked(url):
+                    candidates.append(url)
 
         best = data.get("best_oa_location") or {}
         _push(best.get("url_for_pdf"))

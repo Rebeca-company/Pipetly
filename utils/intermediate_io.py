@@ -16,6 +16,7 @@ Directory layout::
             step7_protocols.json
             step8_scored_protocols.json
             test_llm_token_usage.json
+            test_llm_time_usage.json
 
 Usage example (saving)::
 
@@ -61,6 +62,9 @@ STEP7_FILE = "step7_protocols.json"  # Step 7 protocol extraction output
 STEP8_FILE = "step8_scored_protocols.json"  # ProtocolScorer output
 TEST_LLM_TOKEN_USAGE_FILE = (
     "test_llm_token_usage.json"  # Testing telemetry for LLM token usage
+)
+TEST_LLM_TIME_USAGE_FILE = (
+    "test_llm_time_usage.json"  # Testing telemetry for LLM generation times
 )
 
 

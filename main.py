@@ -29,7 +29,7 @@ from pathlib import Path
 
 from config import get_settings
 from utils.logger import set_stage_logger, setup_logging
-from utils.telemetry import calculate_pipeline_costs
+from utils.telemetry import calculate_pipeline_costs, calculate_pipeline_time_summary
 from processors import (
     FullTextFilter,
     FullTextRetriever,
@@ -51,6 +51,7 @@ from utils.intermediate_io import (
     STEP7_FILE,
     STEP8_FILE,
     TEST_LLM_TOKEN_USAGE_FILE,
+    TEST_LLM_TIME_USAGE_FILE,
     save_json,
 )
 
@@ -248,6 +249,25 @@ async def run_pipeline(user_prompt: str) -> Path:
         TEST_LLM_TOKEN_USAGE_FILE,
     )
 
+    # ── Time telemetry ──────────────────────────────────────────────────────
+    time_events, time_summary = calculate_pipeline_time_summary(
+        raw_events=token_events,
+        model_id=_s.llm_model_general,
+    )
+    save_json(
+        {
+            "token_events": time_events,
+            "total_summary": time_summary,
+        },
+        TEST_LLM_TIME_USAGE_FILE,
+    )
+    logger.info(
+        "[Testing] Time telemetry saved | calls=%d total_gen_ms=%.0f | Output: intermediate_outputs/%s",
+        len(time_events),
+        time_summary["total_generation_time_ms"],
+        TEST_LLM_TIME_USAGE_FILE,
+    )
+
     logger.info(
         "[Step 9] DONE | candidates=%d top_k=%d | Output: %s",
         len(rescored_protocols),
@@ -260,6 +280,7 @@ async def run_pipeline(user_prompt: str) -> Path:
 
 
 def main() -> None:
+    setup_logging()
     if len(sys.argv) < 2:
         print('Usage: python main.py "<your research question>"')
         sys.exit(1)

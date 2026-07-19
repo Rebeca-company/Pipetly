@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from config import get_settings
 
@@ -31,9 +31,20 @@ class BaseLLMProcessor:
         return list(self._llm_token_events)
 
     def _record_llm_usage(
-        self, response_json: dict[str, Any], step_key: str | None = None
+        self,
+        response_json: dict[str, Any],
+        step_key: str | None = None,
+        generation_time_ms: Optional[float] = None,
     ) -> None:
-        """Extract and store token usage from an OpenRouter response."""
+        """Extract and store token usage (and optional timing) from an OpenRouter response.
+
+        Args:
+            response_json: The raw JSON response from the OpenRouter API.
+            step_key: Override the default step name stored in ``self.step_name``.
+            generation_time_ms: Total wall-clock time of the HTTP request in ms.
+                When provided, ``tokens_per_second`` and ``output_tokens_per_second``
+                are computed and stored alongside the event.
+        """
         actual_step = step_key if step_key is not None else self.step_name
         usage = response_json.get("usage") or {}
 
@@ -51,21 +62,36 @@ class BaseLLMProcessor:
         )
         total_tokens = int(usage.get("total_tokens") or (in_tokens + out_tokens))
 
+        # ── Timing fields ──────────────────────────────────────────────────────
+        gen_ms: Optional[float] = (
+            round(generation_time_ms, 2) if generation_time_ms is not None else None
+        )
+        tps: Optional[float] = None
+        out_tps: Optional[float] = None
+        if gen_ms and gen_ms > 0:
+            seconds = gen_ms / 1000.0
+            tps = round(total_tokens / seconds, 2)
+            out_tps = round(out_tokens / seconds, 2)
+
         self._llm_call_count += 1
-        event: dict[str, int | str] = {
+        event: dict[str, Any] = {
             "step": actual_step,
             "call_index": self._llm_call_count,
             "input_tokens": in_tokens,
             "output_tokens": out_tokens,
             "total_tokens": total_tokens,
+            "generation_time_ms": gen_ms,
+            "tokens_per_second": tps,
+            "output_tokens_per_second": out_tps,
         }
         self._llm_token_events.append(event)
 
         logger.info(
-            "LLM step %s tokens (call %d) - in=%d out=%d total=%d",
+            "LLM step %s tokens (call %d) - in=%d out=%d total=%d gen_time=%.0fms",
             actual_step,
             self._llm_call_count,
             in_tokens,
             out_tokens,
             total_tokens,
+            gen_ms or 0,
         )

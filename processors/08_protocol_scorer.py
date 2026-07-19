@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time as _time
 from typing import Any, Optional
 
 import httpx
@@ -33,10 +34,12 @@ Given the user intent and a resolved protocol text, assign a relevance score fro
 5. Provide a brief scoring justification (max 30 words) explaining the main reason for the assigned score.
 
 ## Scoring criteria
-- Intent Alignment (Weight: 60%): Does the primary protocol ([Level 0]) directly address the user's specific technique, biological target, or research intent? 
-- Operational Completeness (Weight: 40%): Can a researcher practically execute this? Evaluate the presence of actionable steps, materials, concentrations, timings, and conditions. 
-  * IMPORTANT: If [Level 0] lacks detail, check if [Level 1] successfully provides the missing steps. 
+- Intent Alignment / Relevance (Weight: 50%): Does the primary protocol ([Level 0]) directly address the user's specific technique, biological target, or research intent, without mixing in steps from an unrelated technique or procedure? This is the single most important criterion — a strong mismatch here should cap the overall score low even if other criteria score well.
+- Operational Completeness (Weight: 25%): Are all steps, reagents, equipment, and measurable parameters (concentrations, timings, temperatures, volumes) expected for this technique present across the combined levels?
+  * IMPORTANT: If [Level 0] lacks detail, check if [Level 1] successfully provides the missing steps.
   * Penalize the score if crucial steps are still missing across all levels.
+- Parameter Plausibility (Weight: 15%): Are the numerical values and conditions present (times, temperatures, concentrations, volumes, units) internally consistent and physicochemically plausible, without contradictions between [Level 0] and [Level 1]?
+- Executability (Weight: 10%): Given the content present, are the instructions explicit and unambiguous enough that a researcher could act on them without needing to guess or infer unstated details?
 
 ## Input
 The input text you will evaluate contains a main protocol and its supporting nested protocols, labeled by their hierarchical relationship:
@@ -139,6 +142,7 @@ class ProtocolScorer(BaseLLMProcessor):
         }
 
         try:
+            _t0 = _time.monotonic()
             if self._http_client is not None:
                 resp = await self._http_client.post(
                     f"{self._base}/chat/completions",
@@ -152,12 +156,13 @@ class ProtocolScorer(BaseLLMProcessor):
                         json=payload,
                         headers=self._headers,
                     )
+            _gen_ms = (_time.monotonic() - _t0) * 1000
 
             if resp.is_error:
                 logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
                 resp.raise_for_status()
             raw_payload = resp.json()
-            self._record_llm_usage(raw_payload)
+            self._record_llm_usage(raw_payload, generation_time_ms=_gen_ms)
             data = self._extract_json_content(raw_payload)
             scoring = ScoringOutput.model_validate(data)
 

@@ -116,6 +116,86 @@ async def calculate_pipeline_costs(
     return token_events, total_summary
 
 
+def calculate_pipeline_time_summary(
+    raw_events: List[Dict[str, Any]],
+    model_id: str,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Build the time-telemetry structure (``test_llm_time_usage.json``) from
+    the enriched token events produced by :func:`calculate_pipeline_costs`.
+
+    Each output event retains only the identification fields
+    (``component``, ``step``, ``call_index``) plus the three timing fields:
+    ``generation_time_ms``, ``tokens_per_second``, and ``output_tokens_per_second``.
+
+    The ``total_summary`` mirrors the token-usage summary shape but uses
+    aggregated timing statistics instead of token counts.
+
+    Args:
+        raw_events: The *enriched* token events (i.e. the output of
+            :func:`calculate_pipeline_costs`), which must already carry the
+            timing fields injected by :meth:`BaseLLMProcessor._record_llm_usage`.
+        model_id: Model identifier stored in the summary header.
+
+    Returns:
+        ``(time_events, time_summary)``
+    """
+    time_events: List[Dict[str, Any]] = []
+    total_gen_ms = 0.0
+    n_with_time = 0
+
+    for event in raw_events:
+        gen_ms = event.get("generation_time_ms")
+        tps = event.get("tokens_per_second")
+        out_tps = event.get("output_tokens_per_second")
+
+        time_events.append(
+            {
+                "component": event.get("component"),
+                "step": event.get("step"),
+                "call_index": event.get("call_index"),
+                "generation_time_ms": gen_ms,
+                "tokens_per_second": tps,
+                "output_tokens_per_second": out_tps,
+            }
+        )
+
+        if gen_ms is not None:
+            total_gen_ms += gen_ms
+            n_with_time += 1
+
+    avg_gen_ms = round(total_gen_ms / n_with_time, 2) if n_with_time else None
+
+    # Global tokens_per_second = aggregate tokens / aggregate generation_s
+    total_tokens_agg = sum(
+        (e.get("total_tokens") or 0) for e in raw_events if e.get("generation_time_ms")
+    )
+    total_out_tokens_agg = sum(
+        (e.get("output_tokens") or 0) for e in raw_events if e.get("generation_time_ms")
+    )
+    global_tps = (
+        round(total_tokens_agg / (total_gen_ms / 1000.0), 2)
+        if total_gen_ms > 0
+        else None
+    )
+    global_out_tps = (
+        round(total_out_tokens_agg / (total_gen_ms / 1000.0), 2)
+        if total_gen_ms > 0
+        else None
+    )
+
+    time_summary: Dict[str, Any] = {
+        "model": model_id,
+        "n_calls": len(raw_events),
+        "n_calls_with_timing": n_with_time,
+        "total_generation_time_ms": round(total_gen_ms, 2),
+        "avg_generation_time_ms": avg_gen_ms,
+        "global_tokens_per_second": global_tps,
+        "global_output_tokens_per_second": global_out_tps,
+    }
+
+    return time_events, time_summary
+
+
 async def log_standalone_telemetry(raw_events: List[Dict[str, Any]], model_id: str, component_name: str) -> None:
     """
     Convenience method for processors run in standalone mode.

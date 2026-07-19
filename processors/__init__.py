@@ -1,23 +1,5 @@
 import importlib
 
-QueryExpander = importlib.import_module("processors.01_query_expander").QueryExpander
-PaperSearcher = importlib.import_module("processors.02_paper_searcher").PaperSearcher
-MetadataFilter = importlib.import_module("processors.03_metadata_filter").MetadataFilter
-FullTextRetriever = importlib.import_module(
-    "processors.04_full_text_retriever"
-).FullTextRetriever
-TextExtractor = importlib.import_module("processors.05_text_extractor").TextExtractor
-FullTextFilter = importlib.import_module(
-    "processors.06_full_text_filter"
-).FullTextFilter
-ProtocolExtractor = importlib.import_module(
-    "processors.07_protocol_extractor"
-).ProtocolExtractor
-ProtocolScorer = importlib.import_module("processors.08_protocol_scorer").ProtocolScorer
-ProtocolFormatter = importlib.import_module(
-    "processors.09_protocol_formatter"
-).ProtocolFormatter
-
 __all__ = [
     "QueryExpander",
     "PaperSearcher",
@@ -29,3 +11,21 @@ __all__ = [
     "ProtocolScorer",
     "ProtocolFormatter",
 ]
+
+_MODULE_MAP = {
+    "QueryExpander": "processors.01_query_expander",
+    "PaperSearcher": "processors.02_paper_searcher",
+    "MetadataFilter": "processors.03_metadata_filter",
+    "FullTextRetriever": "processors.04_full_text_retriever",
+    "TextExtractor": "processors.05_text_extractor",
+    "FullTextFilter": "processors.06_full_text_filter",
+    "ProtocolExtractor": "processors.07_protocol_extractor",
+    "ProtocolScorer": "processors.08_protocol_scorer",
+    "ProtocolFormatter": "processors.09_protocol_formatter",
+}
+
+def __getattr__(name: str):
+    if name in _MODULE_MAP:
+        module = importlib.import_module(_MODULE_MAP[name])
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

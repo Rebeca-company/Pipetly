@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time as _time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional
@@ -31,7 +32,8 @@ You will receive:
 3. [Level N] Supplementary Protocol texts (if any). These are nested references where N indicates the depth of recursion (e.g., [Level 1] provides details missing in [Level 0]; [Level 2] provides details missing in [Level 1]).
 
 Rules for Drafting the Output:
-- Output strictly in Markdown format as a single numbered list (1., 2., 3., ...).
+- **Format:** Output strictly in Markdown format as a structured two-level list format (1., 2., 3. numbers with sub-steps).
+- **Content filtering:** Include only actionable/practical steps. Avoid theoretical explanations, rationale, or material lists. Maintain clear and concise language to ensure logical coherence.
 - **Resolve the Chain:** Follow the "Trigger Context" breadcrumbs. If [Level 0] cites a method detailed in [Level 1], and [Level 1] cites a specific buffer preparation detailed in [Level 2], you MUST unpack this chain and integrate all steps chronologically into the main flow.
 - **Precision:** Retain all exact technical details (concentrations, volumes, times, temperatures, equipment).
 - **No Hallucination:** Do not invent steps.
@@ -242,6 +244,7 @@ class ProtocolFormatter(BaseLLMProcessor):
         }
 
         try:
+            _t0 = _time.monotonic()
             if self._http_client is not None:
                 resp = await self._http_client.post(
                     f"{self._base}/chat/completions",
@@ -255,12 +258,13 @@ class ProtocolFormatter(BaseLLMProcessor):
                         json=payload,
                         headers=self._headers,
                     )
+            _gen_ms = (_time.monotonic() - _t0) * 1000
 
             if resp.is_error:
                 logger.error("OpenRouter error %s – %s", resp.status_code, resp.text)
                 resp.raise_for_status()
             raw_payload = resp.json()
-            self._record_llm_usage(raw_payload)
+            self._record_llm_usage(raw_payload, generation_time_ms=_gen_ms)
             md = raw_payload["choices"][0]["message"]["content"]
             if isinstance(md, list):
                 md = "".join(

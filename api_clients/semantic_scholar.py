@@ -92,12 +92,7 @@ class SemanticScholarClient(BaseAPIClient):
         return papers
 
     async def fetch_full_text(self, paper: Paper) -> Optional[FullText]:
-        """Look up the paper's open-access PDF URL via DOI, then download it.
-
-        For papers from any source, performs a DOI-based lookup against
-        Semantic Scholar to discover an ``openAccessPdf`` URL.  Falls back
-        to the stored ``paper.url`` only for papers sourced from S2.
-        """
+        """Look up the paper's open-access PDF URL via DOI, then download it."""
         candidate_url: Optional[str] = None
 
         if paper.doi:

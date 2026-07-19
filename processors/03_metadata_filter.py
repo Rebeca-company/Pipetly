@@ -8,7 +8,6 @@ deduplicated set of uniquely identifiable records.
 from __future__ import annotations
 
 import logging
-import unicodedata
 import re
 from typing import Dict, List
 
@@ -16,24 +15,7 @@ from models.paper import Paper
 
 logger = logging.getLogger(__name__)
 
-# Normalise a title for duplicate comparison: lowercase, remove accents,
-# strip punctuation, and collapse whitespace.
-_WS_RE = re.compile(r"\s+")
-_PUNCT_RE = re.compile(r"[^\w\s]")
 _DOI_PREFIX_RE = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:)", re.IGNORECASE)
-
-
-def _normalise_title(title: str) -> str:
-    # 1. Quitar acentos: "Détection" → "Detection"
-    title = unicodedata.normalize("NFKD", title)
-    title = title.encode("ascii", "ignore").decode("ascii")
-    # 2. Lowercase
-    title = title.lower()
-    # 3. Eliminar puntuación: "deep-learning" → "deep learning"
-    title = _PUNCT_RE.sub("", title)
-    # 4. Colapsar espacios
-    title = _WS_RE.sub("", title).strip()
-    return title
 
 
 def _canonical_doi(doi: str) -> str:
@@ -61,7 +43,7 @@ def _completeness(paper: Paper) -> int:
 
 
 class MetadataFilter:
-    """Step 3: deduplicate by DOI and title, keep the most complete record."""
+    """Step 3: deduplicate by DOI, keep the most complete record."""
 
     def run(self, papers: List[Paper]) -> List[Paper]:
         """
@@ -74,11 +56,9 @@ class MetadataFilter:
         2. **DOI deduplication** – papers sharing the same DOI
            (case-insensitive) are collapsed; the record with the highest
            metadata-completeness score is kept.
-        3. **Title deduplication** – among the surviving records, papers
-           sharing the same normalised title (but different DOIs) are also
-           collapsed; again the most complete record is kept.
         """
         no_doi: int = 0
+        invalid_doi: int = 0
 
         # ── Pass 1: DOI deduplication ─────────────────────────────────────
         doi_best: Dict[str, Paper] = {}
@@ -89,53 +69,43 @@ class MetadataFilter:
                 continue
             uid = _canonical_doi(paper.doi)
             if not uid:
-                no_doi += 1
+                invalid_doi += 1
                 logger.debug(
                     "Invalid DOI after normalization – discarding '%s'",
                     paper.title[:60],
                 )
                 continue
-            if uid not in doi_best or _completeness(paper) > _completeness(
-                doi_best[uid]
-            ):
+            if uid in doi_best:
+                if _completeness(paper) > _completeness(doi_best[uid]):
+                    logger.debug(
+                        "DOI duplicate – keeping new from '%s' over existing from '%s' (DOI: %s)",
+                        paper.source,
+                        doi_best[uid].source,
+                        paper.doi,
+                    )
+                    doi_best[uid] = paper
+                else:
+                    logger.debug(
+                        "DOI duplicate – keeping existing from '%s' over new from '%s' (DOI: %s)",
+                        doi_best[uid].source,
+                        paper.source,
+                        paper.doi,
+                    )
+            else:
                 doi_best[uid] = paper
 
-        doi_dupes = len(papers) - no_doi - len(doi_best)
+        doi_dupes = len(papers) - no_doi - invalid_doi - len(doi_best)
 
-        # ── Pass 2: title deduplication ───────────────────────────────────
-        title_best: Dict[str, Paper] = {}
-        for paper in doi_best.values():
-            norm = _normalise_title(paper.title)
-            if not norm:
-                title_best[_canonical_doi(paper.doi or "")] = (
-                    paper  # keep by DOI if no title
-                )
-                continue
-            if norm not in title_best or _completeness(paper) > _completeness(
-                title_best[norm]
-            ):
-                if norm in title_best:
-                    logger.debug(
-                        "Title duplicate – keeping '%s' (%s) over '%s' (%s)",
-                        paper.title[:60],
-                        paper.doi,
-                        title_best[norm].title[:60],
-                        title_best[norm].doi,
-                    )
-                title_best[norm] = paper
-
-        title_dupes = len(doi_best) - len(title_best)
-        accepted = list(title_best.values())
+        accepted = list(doi_best.values())
 
         logger.info(
             "Metadata filtering: %d raw -> %d accepted "
-            "(%d no-DOI discarded, %d DOI-duplicates removed, "
-            "%d title-duplicates removed).",
+            "(%d no-DOI discarded, %d invalid-DOI discarded, %d DOI-duplicates removed).",
             len(papers),
             len(accepted),
             no_doi,
+            invalid_doi,
             doi_dupes,
-            title_dupes,
         )
         return accepted
 

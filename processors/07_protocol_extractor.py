@@ -14,6 +14,7 @@ import contextlib
 import json
 import logging
 import re
+import time as _time
 from typing import Any, Dict, Optional
 
 import httpx
@@ -68,8 +69,13 @@ Evaluate the relevance of the extracted protocol to the user intent and assign a
     - Preserve all technical values: catalogue numbers, vendors, buffer compositions, speeds, volumes, temperatures, pH, wavelengths, software versions, and exclusion rules.
     - If the protocol is split across sections (Methods/Results/Figure legends/Supplementary), concatenate the paragraphs preserving their original wording.
     - Keep the original order of sentences and sections.
+    - Target specific scope: If the user intent targets a specific downstream stage or sub-procedure, extract only the text relevant to that requested sub-stage rather than the entire pipeline.
 
-3. **Scoring:** Assign `relevance_score` (0-100) based on how well the extracted protocol allows for physical replication of the user intent.
+3. **Scoring:** Assign `relevance_score` (0-100) based on how well the extracted protocol allows for physical replication of the user intent. Consider the following criteria:
+    - **Intent Alignment / Relevance (Weight: 50%):** Does the extracted protocol directly address the user's specific technique, biological target, or research intent? A strong mismatch here should cap the overall score low.
+    - **Operational Completeness (Weight: 25%):** Are all steps, reagents, equipment, and measurable parameters expected for this technique present in the extracted text? (Note: Missing details can be supplemented if references are extracted).
+    - **Parameter Plausibility (Weight: 15%):** Are the numerical values and conditions present internally consistent and physicochemically plausible?
+    - **Executability (Weight: 10%):** Given the extracted content, are the instructions explicit and unambiguous enough that a researcher could act on them?
 """
 
 _STEP_7_1_SCHEMA: dict[str, Any] = {
@@ -347,9 +353,9 @@ class ProtocolExtractor(BaseLLMProcessor):
             return None
 
         # Only continue with Steps 7.2-7.4 when Step 7.1 is strongly relevant.
-        if score <= 70.0:
+        if score <= 40.0:
             logger.info(
-                "Step 7.1 (depth=%d) - score %.2f <= 70; skipping Steps 7.2-7.4 for '%s'.",
+                "Step 7.1 (depth=%d) - score %.2f <= 40; skipping Steps 7.2-7.4 for '%s'.",
                 depth,
                 score,
                 paper.title[:100],
@@ -442,7 +448,7 @@ class ProtocolExtractor(BaseLLMProcessor):
         prompt = f"User intent:\n{user_intent}\n\nPaper full text:\n{paper_text}"
         raw = await self._call_llm_json(
             step_key="7.1",
-            model=_s.llm_model_fulltext,
+            model=_s.llm_model_general,
             system_prompt=_STEP_7_1_SYSTEM,
             user_prompt=prompt,
             schema=_STEP_7_1_SCHEMA,
@@ -843,17 +849,19 @@ class ProtocolExtractor(BaseLLMProcessor):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.1,
+            "temperature": 0.0,
             "response_format": {"type": "json_schema", "json_schema": schema},
         }
 
         async with self._llm_semaphore:
             try:
+                _t0 = _time.monotonic()
                 resp = await self._http_client.post(
                     f"{self._base}/chat/completions",
                     json=payload,
                     headers=self._headers,
                 )
+                _gen_ms = (_time.monotonic() - _t0) * 1000
                 if resp.is_error:
                     logger.error(
                         "OpenRouter error on step %s %s: %s - %s",
@@ -865,7 +873,7 @@ class ProtocolExtractor(BaseLLMProcessor):
                     resp.raise_for_status()
 
                 raw_payload = resp.json()
-                self._record_llm_usage(raw_payload, step_key=step_key)
+                self._record_llm_usage(raw_payload, step_key=step_key, generation_time_ms=_gen_ms)
 
                 content = (
                     raw_payload.get("choices", [{}])[0]
@@ -1115,6 +1123,7 @@ if __name__ == "__main__":
 
     async def _main() -> None:
         logger.info("[Step 7] START | Recursive Protocol Extraction")
+        _s = get_settings()
         papers = load_model_list(STEP6_FILE, Paper)
         intent = load_model(STEP1_FILE, ExpandedQuery).intent
 
@@ -1132,7 +1141,6 @@ if __name__ == "__main__":
         )
 
         events = extractor.get_llm_token_events()
-        _s = get_settings()
-        await log_standalone_telemetry(events, _s.llm_model_fulltext, "protocol_extractor")
+        await log_standalone_telemetry(events, _s.llm_model_general, "protocol_extractor")
 
     asyncio.run(_main())

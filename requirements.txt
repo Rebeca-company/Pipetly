@@ -1,6 +1,14 @@
-httpx>=0.27.0
-pydantic>=2.7.0
-pydantic-settings>=2.3.0
+# ── Core HTTP client ──────────────────────────────────────────────────────────
+httpx>=0.28.1
+
+# ── Data validation & settings ────────────────────────────────────────────────
+pydantic>=2.12.0
+pydantic-settings>=2.13.0
+
+# ── Full-text extraction ──────────────────────────────────────────────────────
+# PyMuPDF is the primary (fast) PDF extractor; pdfminer.six is the fallback.
+pymupdf>=1.28.0
 pdfminer.six>=20221105
-lxml>=5.0
-pymupdf>=1.24.10
+
+# ── XML / HTML parsing ────────────────────────────────────────────────────────
+lxml>=6.1.0

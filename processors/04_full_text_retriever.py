@@ -78,10 +78,12 @@ class FullTextRetriever:
 
         success = 0
         failure = 0
+        total_fetches = 0
         for key, paper, result in zip(canonical_keys, canonical_papers, raw_results):
             target_group = key_to_papers.get(key, [paper])
             if isinstance(result, tuple):
                 ft, client_name, elapsed_ms, attempts = result
+                total_fetches += len(attempts)
                 for target in target_group:
                     target.ft_attempts = attempts
                 
@@ -101,14 +103,19 @@ class FullTextRetriever:
                     result,
                 )
 
+        n_unique = len(canonical_papers)
         papers_with_full_text = [
             p for p in papers if p.full_text is not None and p.full_text.content.strip()
         ]
         logger.info(
-            "Full-text retrieval: %d successes, %d failures (out of %d total fetches)",
+            "Full-text retrieval complete: %d / %d unique papers fetched successfully, "
+            "%d had no retrievable full-text. "
+            "(%d individual API calls made across %d clients)",
             success,
+            n_unique,
             failure,
-            self._api_fetches,
+            total_fetches,
+            len(self._CLIENT_ORDER),
         )
         return papers_with_full_text
 

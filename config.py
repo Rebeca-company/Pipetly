@@ -30,11 +30,11 @@ class Settings(BaseSettings):
     openrouter_api_key: str = Field(..., alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     
-    # Model used for tasks that require reading long full-text paper content.
-    llm_model_fulltext: str = "openai/gpt-4o-mini"
-    
-    # Model used for the rest of LLM tasks (query expansion, formatting, etc.).
-    llm_model_general: str = "openai/gpt-4o-mini"
+    # Model used for all LLM tasks (query expansion, full-text extraction, formatting, etc.).
+    llm_model_general: str = "deepseek/deepseek-v4-flash" 
+    # google/gemini-3-flash-preview
+    # deepseek/deepseek-v4-flash
+    # xiaomi/mimo-v2.5
 
     # Precios manuales por 1M de tokens (se usan si no se obtienen de OpenRouter)
     llm_cost_input_usd_per_1m: float = 0.50
@@ -61,14 +61,14 @@ class Settings(BaseSettings):
     max_citation_depth: int = 2  # recursive citation-investigator depth
     full_text_min_chars: int = 10_000  # accepted minimum full-text length
     full_text_max_chars: int = 200_000  # accepted maximum full-text length
-    top_k_protocols: int = 5  # how many to score/return
-    llm_max_concurrent: int = 20  # shared LLM concurrency for Steps 7, 9 and 10
+    top_k_protocols: int = 3  # how many to score/return
+    llm_max_concurrent: int = 20  # shared LLM concurrency for Steps 7, 8 and 9
 
     # ── Output ────────────────────────────────────────────────────────────────
     output_dir: str = "output"
 
     # ── Logging ───────────────────────────────────────────────────────────────
-    log_level: str = "DEBUG"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
     export_stage_logs: bool = True
 
 
