@@ -69,78 +69,78 @@ st.markdown(
     /* Remove default top padding */
     .block-container,
     [data-testid="stMainBlockContainer"] {{
-        padding-top: 1rem !important;
+        padding-top: 0.5rem !important;
         padding-bottom: 2rem;
         max-width: 100%;
     }}
 
     /* ── Header card ── */
     .prunia-header {{
-        background: {DARK_NAVY};
-        border-radius: 14px;
-        padding: 1rem 1.8rem;
+        background: #2F3C4D;
+        border-radius: 12px;
+        padding: 0.6rem 1.2rem;
         display: flex;
         align-items: center;
         gap: 1.2rem;
-        margin-bottom: 1.4rem;
+        margin-bottom: 0.5rem;
     }}
     .header-logo-wrap {{
-        background: {BROKEN_WHITE};
-        border-radius: 10px;
-        padding: 5px 8px;
+        background: #FDFCF5;
+        border-radius: 8px;
+        padding: 4px 6px;
         display: flex;
         align-items: center;
     }}
     .prunia-wordmark {{
-        font-size: 1.7rem;
+        font-size: 1.5rem;
         font-weight: 800;
-        color: {BROKEN_WHITE};
+        color: #FDFCF5;
         letter-spacing: -0.02em;
         margin: 0;
         line-height: 1;
     }}
     .prunia-tagline {{
-        font-size: 0.78rem;
-        color: rgba(253,252,245,0.50);
-        margin: 0.15rem 0 0 0;
+        font-size: 0.72rem;
+        color: rgba(253,252,245,0.60);
+        margin: 0.1rem 0 0 0;
         font-weight: 400;
     }}
 
     /* ── Section headings in config panel ── */
     .config-section {{
-        font-size: 0.68rem;
+        font-size: 0.65rem;
         font-weight: 700;
         letter-spacing: 0.10em;
         text-transform: uppercase;
-        color: {RED};
-        margin-top: 1.6rem;
-        margin-bottom: 0.4rem;
-        padding-bottom: 0.25rem;
+        color: #D1232B;
+        margin-top: 1.0rem;
+        margin-bottom: 0.3rem;
+        padding-bottom: 0.2rem;
         border-bottom: 1px solid rgba(209,35,43,0.2);
     }}
 
     /* ── Config panel: left column background ── */
     [data-testid="column"]:first-child {{
-        background: {DARK_NAVY};
-        border-radius: 14px;
-        padding: 1.2rem 1.1rem 1.4rem 1.1rem;
+        background: #2F3C4D;
+        border-radius: 12px;
+        padding: 1.0rem 1rem 1.0rem 1rem;
     }}
     [data-testid="column"]:first-child label,
     [data-testid="column"]:first-child p,
     [data-testid="column"]:first-child span,
     [data-testid="column"]:first-child .stMarkdown,
     [data-testid="column"]:first-child .stSlider label {{
-        color: {BROKEN_WHITE} !important;
+        color: #FDFCF5 !important;
     }}
     [data-testid="column"]:first-child [data-testid="stTextInput"] input,
     [data-testid="column"]:first-child [data-testid="stNumberInput"] input {{
         background: rgba(255,255,255,0.08) !important;
         border: 1px solid rgba(209,35,43,0.40) !important;
         border-radius: 7px !important;
-        color: {BROKEN_WHITE} !important;
+        color: #FDFCF5 !important;
     }}
     [data-testid="column"]:first-child [data-testid="stTextInput"] input:focus {{
-        border-color: {RED} !important;
+        border-color: #D1232B !important;
         box-shadow: 0 0 0 2px rgba(209,35,43,0.18) !important;
     }}
 
@@ -148,99 +148,102 @@ st.markdown(
     [data-testid="stTextArea"] textarea {{
         background: #ffffff !important;
         border: 1.5px solid rgba(209,35,43,0.25) !important;
-        border-radius: 10px !important;
-        color: {DARK_NAVY} !important;
-        font-size: 0.95rem;
+        border-radius: 8px !important;
+        color: #2F3C4D !important;
+        font-size: 0.90rem;
+        padding: 0.5rem !important;
     }}
     [data-testid="stTextArea"] textarea:focus {{
-        border-color: {RED} !important;
+        border-color: #D1232B !important;
         box-shadow: 0 0 0 3px rgba(209,35,43,0.12) !important;
     }}
 
     /* ── Labels ── */
     label {{
-        color: {DARK_NAVY} !important;
+        color: #2F3C4D !important;
         font-weight: 500;
+        margin-bottom: 0.2rem !important;
     }}
 
     /* ── Generate button ── */
     .stButton > button {{
-        background: linear-gradient(135deg, {RED} 0%, #a01920 100%);
-        color: {BROKEN_WHITE};
+        background: linear-gradient(135deg, #D1232B 0%, #a01920 100%);
+        color: #FDFCF5;
         border: none;
-        border-radius: 9px;
+        border-radius: 8px;
         font-weight: 700;
-        font-size: 0.95rem;
-        padding: 0.6rem 2rem;
+        font-size: 0.90rem;
+        padding: 0.4rem 1rem;
         letter-spacing: 0.03em;
         transition: all 0.22s ease;
-        box-shadow: 0 4px 18px rgba(209,35,43,0.30);
+        box-shadow: 0 4px 12px rgba(209,35,43,0.30);
         width: 100%;
+        margin-top: 0.2rem;
     }}
     .stButton > button:hover {{
         transform: translateY(-2px);
-        box-shadow: 0 7px 24px rgba(209,35,43,0.50);
-        background: linear-gradient(135deg, #e02530 0%, {RED} 100%);
+        box-shadow: 0 6px 18px rgba(209,35,43,0.50);
+        background: linear-gradient(135deg, #e02530 0%, #D1232B 100%);
     }}
     .stButton > button:active {{ transform: translateY(0); }}
 
     /* ── Step progress chips ── */
     .step-bar {{
-        display: flex; gap: 0.35rem; margin: 0.8rem 0; flex-wrap: wrap;
+        display: flex; gap: 0.20rem; margin: 0.3rem 0; flex-wrap: wrap;
     }}
     .step-chip {{
-        padding: 0.25rem 0.65rem; border-radius: 6px; font-size: 0.70rem;
+        padding: 0.15rem 0.35rem; border-radius: 4px; font-size: 0.68rem;
         font-weight: 600; border: 1px solid rgba(47,60,77,0.18);
         color: rgba(47,60,77,0.45); background: rgba(209,35,43,0.04);
-        transition: all 0.25s;
+        transition: all 0.25s; text-align: center; line-height: 1.2;
     }}
-    .step-chip.active {{ background: rgba(209,35,43,0.12); border-color: {RED}; color: {RED}; font-weight: 700; }}
+    .step-chip.active {{ background: rgba(209,35,43,0.12); border-color: #D1232B; color: #D1232B; font-weight: 700; }}
     .step-chip.done   {{ background: rgba(46,204,113,0.12); border-color: #27ae60; color: #1e8449; }}
-    .step-chip.error  {{ background: rgba(209,35,43,0.15); border-color: {RED}; color: {RED}; }}
+    .step-chip.error  {{ background: rgba(209,35,43,0.15); border-color: #D1232B; color: #D1232B; }}
 
     /* ── KPI metric cards ── */
     .kpi-card {{
         background: #ffffff;
         border: 1px solid rgba(47,60,77,0.12);
-        border-radius: 10px;
-        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        padding: 0.5rem 0.5rem;
         text-align: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.02);
     }}
     .kpi-card .kpi-num {{
-        font-size: 1.4rem;
+        font-size: 1.25rem;
         font-weight: 800;
-        color: {DARK_NAVY};
+        color: #2F3C4D;
         line-height: 1.1;
     }}
     .kpi-card .kpi-label {{
-        font-size: 0.68rem;
+        font-size: 0.65rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: rgba(47,60,77,0.55);
-        margin-top: 0.2rem;
+        margin-top: 0.15rem;
     }}
 
     /* ── Step details card ── */
     .step-detail-card {{
         background: #ffffff;
-        border-left: 4px solid {RED};
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        margin-bottom: 0.6rem;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+        border-left: 4px solid #D1232B;
+        border-radius: 6px;
+        padding: 0.5rem 0.8rem;
+        margin-bottom: 0.3rem;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.03);
     }}
     .step-detail-title {{
-        font-size: 0.82rem;
+        font-size: 0.78rem;
         font-weight: 700;
-        color: {DARK_NAVY};
-        margin-bottom: 0.25rem;
+        color: #2F3C4D;
+        margin-bottom: 0.15rem;
     }}
     .step-detail-body {{
-        font-size: 0.76rem;
+        font-size: 0.72rem;
         color: rgba(47,60,77,0.85);
-        line-height: 1.4;
+        line-height: 1.3;
     }}
 
     /* ── Status badges ── */
@@ -319,99 +322,6 @@ st.markdown(
 st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
 
 # =============================================================================
-# TWO-COLUMN BODY
-# =============================================================================
-col_config, col_main = st.columns([1, 2], gap="large")
-
-# ── LEFT: Configuration panel ─────────────────────────────────────────────────
-with col_config:
-    st.markdown('<div class="config-section">Model</div>', unsafe_allow_html=True)
-    llm_model = st.text_input(
-        "OpenRouter Model ID",
-        value="deepseek/deepseek-v4-flash",
-        help="Any model on openrouter.ai, e.g. google/gemini-2.5-flash",
-        key="llm_model",
-        label_visibility="visible",
-    )
-
-    st.markdown('<div class="config-section">Pipeline Parameters</div>', unsafe_allow_html=True)
-    top_k_protocols = st.slider(
-        "Top-K Protocols", 1, 10, 3, 1,
-        help="Number of top-scored protocols in the final report.",
-        key="top_k",
-    )
-    max_papers = st.slider(
-        "Max Papers per Source", 1, 20, 3, 1,
-        help="Maximum papers fetched from each search API.",
-        key="max_papers",
-    )
-    max_depth = st.slider(
-        "Max Citation Recursion Depth", 0, 5, 2, 1,
-        help="Depth of the recursive citation investigator (0 = no recursion).",
-        key="max_depth",
-    )
-
-    st.markdown('<div class="config-section">API Keys</div>', unsafe_allow_html=True)
-    openrouter_key = st.text_input(
-        "OpenRouter API Key (required)",
-        type="password",
-        placeholder="sk-or-...",
-        help="https://openrouter.ai/keys",
-        key="openrouter_key",
-    )
-
-    with st.expander("Optional API Keys", expanded=False):
-        elsevier_key    = st.text_input("Elsevier API Key", type="password",
-                              placeholder="Leave blank to skip", key="elsevier_key")
-        elsevier_token  = st.text_input("Elsevier Inst. Token", type="password",
-                              placeholder="Leave blank to skip", key="elsevier_token")
-        semantic_key    = st.text_input("Semantic Scholar API Key", type="password",
-                              placeholder="Leave blank to skip", key="semantic_key")
-        unpaywall_email = st.text_input("Unpaywall Email",
-                              placeholder="you@institution.edu", key="unpaywall_email")
-        ncbi_key        = st.text_input("NCBI (PubMed) API Key", type="password",
-                              placeholder="Leave blank to skip", key="ncbi_key")
-
-    st.markdown(
-        f'<p style="font-size:0.65rem;color:rgba(253,252,245,0.35);margin-top:1.2rem;">'
-        f'Keys are session-only and never persisted.</p>',
-        unsafe_allow_html=True,
-    )
-
-
-# ── RIGHT: Prompt + Results ───────────────────────────────────────────────────
-with col_main:
-    st.markdown(
-        f'<p style="font-size:0.72rem;font-weight:700;letter-spacing:0.10em;'
-        f'text-transform:uppercase;color:{RED};margin-bottom:0.4rem;">'
-        f'Protocol Request</p>',
-        unsafe_allow_html=True,
-    )
-
-    user_prompt = st.text_area(
-        label="Protocol request",
-        label_visibility="collapsed",
-        placeholder=(
-            "Describe the protocol you need. "
-            "e.g. Protocol for CRISPR-Cas9 gene editing in human iPSC cell lines "
-            "with electroporation delivery..."
-        ),
-        height=140,
-        key="user_prompt",
-    )
-
-    col_btn, col_hint = st.columns([1, 2])
-    with col_btn:
-        run_button = st.button("Generate Protocol", use_container_width=True, key="run_btn")
-    with col_hint:
-        st.markdown(
-            f'<p style="color:rgba(47,60,77,0.45);font-size:0.80rem;padding-top:0.6rem;">'
-            f'Searches multiple academic databases, extracts and scores protocols, '
-            f'and writes a Markdown report.</p>',
-            unsafe_allow_html=True,
-        )
-
-# =============================================================================
 # PIPELINE STEPS DEFINITION & UI HELPERS
 # =============================================================================
 STEPS = [
@@ -432,7 +342,7 @@ def render_step_bar(active: int = -1, done_up_to: int = -1, error_at: int = -1) 
             cls = "active"
         else:
             cls = ""
-        chips.append(f'<div class="step-chip {cls}">Step {i+1}: {name}</div>')
+        chips.append(f'<div class="step-chip {cls}">Step {i+1}:<br>{name}</div>')
     return f'<div class="step-bar">{"".join(chips)}</div>'
 
 
@@ -479,17 +389,28 @@ def inject_env_vars() -> None:
 
 
 def patch_settings() -> None:
-    """Clear cached settings and rebuild with UI values."""
+    """Update cached settings with UI values in-place."""
     import config as cfg_module
-    cfg_module.get_settings.cache_clear()
     inject_env_vars()
+    
+    # We do NOT clear the cache. We mutate the existing singleton so that all modules
+    # that did `_s = get_settings()` at import time see the new values.
     s = cfg_module.get_settings()
+    
+    # API Keys
+    s.openrouter_api_key       = st.session_state.get("openrouter_key", s.openrouter_api_key)
+    s.elsevier_api_key         = st.session_state.get("elsevier_key", s.elsevier_api_key)
+    s.elsevier_inst_token      = st.session_state.get("elsevier_token", s.elsevier_inst_token)
+    s.semantic_scholar_api_key = st.session_state.get("semantic_key", s.semantic_scholar_api_key)
+    s.unpaywall_email          = st.session_state.get("unpaywall_email", s.unpaywall_email)
+    s.ncbi_api_key             = st.session_state.get("ncbi_key", s.ncbi_api_key)
+
+    # Pipeline parameters
     s.llm_model_general     = st.session_state.get("llm_model", s.llm_model_general)
     s.top_k_protocols       = st.session_state.get("top_k", s.top_k_protocols)
     s.max_papers_per_source = st.session_state.get("max_papers", s.max_papers_per_source)
     s.max_citation_depth    = st.session_state.get("max_depth", s.max_citation_depth)
-    import main as main_module
-    main_module._s = s
+
 
 
 class ThreadQueueHandler(logging.Handler):
@@ -507,292 +428,427 @@ class ThreadQueueHandler(logging.Handler):
 
 
 # =============================================================================
-# RUN PIPELINE
+# TWO-COLUMN BODY
 # =============================================================================
-if run_button:
-    prompt_text = st.session_state.get("user_prompt", "").strip()
-    api_key     = st.session_state.get("openrouter_key", "").strip()
+col_config, col_main = st.columns([1, 2.8], gap="large")
 
-    if not prompt_text:
-        st.error("Please enter a protocol description before running.")
-        st.stop()
-    if not api_key:
-        st.error("An OpenRouter API Key is required. Enter it in the configuration panel.")
-        st.stop()
+# ── LEFT: Configuration panel ─────────────────────────────────────────────────
+with col_config:
+    import config as cfg_module
+    try:
+        def_cfg = cfg_module.get_settings()
+    except Exception:
+        def_cfg = None
 
-    patch_settings()
+    def_model          = def_cfg.llm_model_general if def_cfg else "deepseek/deepseek-v4-flash"
+    def_top_k          = def_cfg.top_k_protocols if def_cfg else 3
+    def_max_papers     = def_cfg.max_papers_per_source if def_cfg else 3
+    def_max_depth      = def_cfg.max_citation_depth if def_cfg else 2
 
-    st.markdown("<hr>", unsafe_allow_html=True)
-    status_placeholder   = st.empty()
-    progress_placeholder = st.empty()
-    step_bar_placeholder = st.empty()
-    metrics_placeholder  = st.empty()
-    details_placeholder  = st.empty()
-    log_placeholder      = st.empty()
-    result_placeholder   = st.empty()
+    def_openrouter_key = def_cfg.openrouter_api_key if def_cfg else ""
+    def_elsevier_key   = def_cfg.elsevier_api_key if def_cfg else ""
+    def_elsevier_token = def_cfg.elsevier_inst_token if def_cfg else ""
+    def_semantic_key   = def_cfg.semantic_scholar_api_key if def_cfg else ""
+    def_unpaywall_email= def_cfg.unpaywall_email if def_cfg else ""
+    def_ncbi_key       = def_cfg.ncbi_api_key if def_cfg else ""
 
-    # Initial UI state
-    status_placeholder.markdown(
-        f'<span class="badge-running">RUNNING</span>'
-        f'<span style="margin-left:0.75rem;color:rgba(47,60,77,0.65);font-size:0.88rem;">'
-        f'Starting pipeline...</span>',
-        unsafe_allow_html=True,
+    st.markdown('<div class="config-section">Model</div>', unsafe_allow_html=True)
+    PRESET_MODELS = [
+        "deepseek/deepseek-v4-flash",
+        "google/gemini-2.5-flash",
+        "xiaomi/mimo-v2.5",
+        "google/gemini-3-flash-preview",
+        "anthropic/claude-3.5-haiku",
+        "openai/gpt-4o-mini",
+        "Otro (ID personalizado)...",
+    ]
+
+    default_idx = PRESET_MODELS.index(def_model) if def_model in PRESET_MODELS else len(PRESET_MODELS) - 1
+    selected_model_option = st.selectbox(
+        "Select LLM Model",
+        options=PRESET_MODELS,
+        index=default_idx,
+        help="Select a recommended model or enter a custom OpenRouter model ID.",
+        key="model_select_preset",
     )
-    progress_placeholder.progress(0.0)
-    step_bar_placeholder.markdown(render_step_bar(active=0), unsafe_allow_html=True)
 
-    metrics = {
-        "queries": 0,
-        "raw_papers": 0,
-        "unique_papers": 0,
-        "full_text_papers": 0,
-        "plain_text_papers": 0,
-        "filtered_papers": 0,
-        "protocols_extracted": 0,
-        "protocols_scored": 0,
-    }
-    metrics_placeholder.markdown(render_kpi_cards(metrics), unsafe_allow_html=True)
-
-    # Thread-safe log queue and handler setup
-    log_queue: queue.Queue[str] = queue.Queue()
-    queue_handler = ThreadQueueHandler(log_queue)
-    queue_handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s | %(message)s", datefmt="%H:%M:%S")
-    )
-    root_logger = logging.getLogger()
-    root_logger.addHandler(queue_handler)
-
-    # Dictionary to hold output / error from worker thread
-    thread_result: dict[str, str | Path | None] = {"output_path": None, "error": None}
-
-    def worker() -> None:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            import utils.logger as logger_module
-            logger_module.setup_logging()
-            import main as main_module
-            output = loop.run_until_complete(main_module.run_pipeline(prompt_text))
-            thread_result["output_path"] = output
-        except Exception as exc:
-            thread_result["error"] = f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}"
-        finally:
-            loop.close()
-
-    pipeline_thread = threading.Thread(target=worker, daemon=True)
-    start_time = time.time()
-    pipeline_thread.start()
-
-    log_lines: list[str] = []
-    step_details: list[dict[str, str]] = []
-    active_step_idx = 0
-    done_step_idx = -1
-
-    # Main monitoring loop running on Streamlit's script thread
-    while pipeline_thread.is_alive() or not log_queue.empty():
-        # Drain log queue
-        updated = False
-        while not log_queue.empty():
-            try:
-                line = log_queue.get_nowait()
-                log_lines.append(line)
-                updated = True
-
-                # Parse Step progress and details from logs
-                for step_num in range(1, 10):
-                    if f"[Step {step_num}] START" in line:
-                        active_step_idx = step_num - 1
-                    if f"[Step {step_num}] DONE" in line:
-                        done_step_idx = step_num - 1
-
-                # Parse specific metrics from log lines
-                if "concept_queries=" in line:
-                    try:
-                        q_cnt = int(line.split("concept_queries=")[1].split()[0])
-                        metrics["queries"] = q_cnt
-                        step_details.append({
-                            "title": "Step 1: Query Expansion Complete",
-                            "body": f"Extracted research intent and generated {q_cnt} targeted concept queries."
-                        })
-                    except Exception:
-                        pass
-                if "raw_records=" in line:
-                    try:
-                        r_cnt = int(line.split("raw_records=")[1].split()[0])
-                        metrics["raw_papers"] = r_cnt
-                        step_details.append({
-                            "title": "Step 2: Database Search Complete",
-                            "body": f"Retrieved {r_cnt} raw paper records across configured academic search APIs."
-                        })
-                    except Exception:
-                        pass
-                if "[Step 3] DONE" in line and "output=" in line:
-                    try:
-                        u_cnt = int(line.split("output=")[1].split()[0])
-                        metrics["unique_papers"] = u_cnt
-                        step_details.append({
-                            "title": "Step 3: Metadata Filter Complete",
-                            "body": f"Deduplicated and validated DOIs. Kept {u_cnt} unique papers."
-                        })
-                    except Exception:
-                        pass
-                if "[Step 4] DONE" in line and "output=" in line:
-                    try:
-                        ft_cnt = int(line.split("output=")[1].split()[0])
-                        metrics["full_text_papers"] = ft_cnt
-                        step_details.append({
-                            "title": "Step 4: Full-Text Retrieval Complete",
-                            "body": f"Fetched full-text body (PDF/XML/HTML) for {ft_cnt} papers."
-                        })
-                    except Exception:
-                        pass
-                if "[Step 5] DONE" in line and "output=" in line:
-                    try:
-                        pt_cnt = int(line.split("output=")[1].split()[0])
-                        metrics["plain_text_papers"] = pt_cnt
-                        step_details.append({
-                            "title": "Step 5: Text Extraction Complete",
-                            "body": f"Parsed {pt_cnt} papers into normalized plain text."
-                        })
-                    except Exception:
-                        pass
-                if "[Step 6] DONE" in line and "output=" in line:
-                    try:
-                        fl_cnt = int(line.split("output=")[1].split()[0])
-                        metrics["filtered_papers"] = fl_cnt
-                        step_details.append({
-                            "title": "Step 6: Post-Extraction Filter Complete",
-                            "body": f"{fl_cnt} papers satisfied text length constraints (10k - 200k chars)."
-                        })
-                    except Exception:
-                        pass
-                if "[Step 7] DONE" in line and "output=" in line:
-                    try:
-                        pr_cnt = int(line.split("output=")[1].split()[0])
-                        metrics["protocols_extracted"] = pr_cnt
-                        step_details.append({
-                            "title": "Step 7: Recursive Protocol Extraction Complete",
-                            "body": f"Extracted and resolved {pr_cnt} protocol intervals and inherited citations."
-                        })
-                    except Exception:
-                        pass
-                if "[Step 8] DONE" in line and "output=" in line:
-                    try:
-                        sc_cnt = int(line.split("output=")[1].split()[0])
-                        metrics["protocols_scored"] = sc_cnt
-                        step_details.append({
-                            "title": "Step 8: Protocol Scoring Complete",
-                            "body": f"Evaluated and re-scored {sc_cnt} extracted protocols."
-                        })
-                    except Exception:
-                        pass
-
-            except queue.Empty:
-                break
-
-        elapsed = time.time() - start_time
-        steps_done_cnt = done_step_idx + 1 if done_step_idx >= 0 else 0
-        progress_val = min(1.0, max(0.05, steps_done_cnt / len(STEPS)))
-
-        curr_step_name = STEPS[active_step_idx] if 0 <= active_step_idx < len(STEPS) else "Processing..."
-
-        status_placeholder.markdown(
-            f'<span class="badge-running">RUNNING</span>'
-            f'<span style="margin-left:0.75rem;color:rgba(47,60,77,0.75);font-size:0.88rem;">'
-            f'Step {active_step_idx + 1} / {len(STEPS)} &nbsp;&mdash;&nbsp; <b>{curr_step_name}</b> '
-            f'&nbsp;&middot;&nbsp; ⏱️ {elapsed:.1f}s</span>',
-            unsafe_allow_html=True,
-        )
-        progress_placeholder.progress(progress_val)
-        step_bar_placeholder.markdown(
-            render_step_bar(active=active_step_idx, done_up_to=done_step_idx),
-            unsafe_allow_html=True,
-        )
-        metrics_placeholder.markdown(render_kpi_cards(metrics), unsafe_allow_html=True)
-
-        # Render live step output stream
-        if step_details:
-            details_html = "".join([
-                f'<div class="step-detail-card">'
-                f'<div class="step-detail-title">{d["title"]}</div>'
-                f'<div class="step-detail-body">{d["body"]}</div>'
-                f'</div>'
-                for d in step_details[-4:]
-            ])
-            details_placeholder.markdown(details_html, unsafe_allow_html=True)
-
-        # Render live log console
-        visible_logs = log_lines[-16:]
-        log_text = "\n".join(visible_logs)
-        log_placeholder.markdown(
-            f"<details><summary style='color:{RED};font-weight:600;"
-            f"cursor:pointer;font-size:0.82rem;'>Live Execution Logs ({len(log_lines)} entries)</summary>"
-            f"<pre style='background:#f7f6ef;border:1px solid rgba(209,35,43,0.15);"
-            f"border-radius:8px;padding:0.75rem;font-size:0.68rem;color:{DARK_NAVY};"
-            f"max-height:220px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;'>"
-            f"{log_text}</pre></details>",
-            unsafe_allow_html=True,
-        )
-
-        time.sleep(0.15)
-
-    # Clean up handler
-    root_logger.removeHandler(queue_handler)
-
-    elapsed_total = time.time() - start_time
-    output_path = thread_result.get("output_path")
-    error_msg = thread_result.get("error")
-
-    if error_msg:
-        err_step_idx = min(done_step_idx + 1, len(STEPS) - 1)
-        step_bar_placeholder.markdown(
-            render_step_bar(done_up_to=done_step_idx, error_at=err_step_idx),
-            unsafe_allow_html=True,
-        )
-        status_placeholder.markdown(
-            f'<span class="badge-error">ERROR</span>'
-            f'<span style="margin-left:0.75rem;color:rgba(47,60,77,0.75);font-size:0.88rem;">'
-            f'Pipeline failed at Step {err_step_idx + 1} ({STEPS[err_step_idx]}) &nbsp;&middot;&nbsp; ⏱️ {elapsed_total:.1f}s</span>',
-            unsafe_allow_html=True,
-        )
-        result_placeholder.markdown(
-            f"<div class='result-box' style='border-color:rgba(209,35,43,0.45);'>"
-            f"<p style='font-weight:700;color:{RED};margin-bottom:0.5rem;'>Pipeline Error Details</p>"
-            f"<pre style='font-size:0.72rem;color:{DARK_NAVY};"
-            f"white-space:pre-wrap;word-break:break-word;'>{error_msg}</pre></div>",
-            unsafe_allow_html=True,
+    if selected_model_option == "Otro (ID personalizado)...":
+        llm_model = st.text_input(
+            "Custom OpenRouter Model ID",
+            value=def_model if def_model not in PRESET_MODELS[:-1] else "meta-llama/llama-3.3-70b-instruct",
+            help="Full OpenRouter model string (e.g. meta-llama/llama-3.3-70b-instruct)",
+            key="llm_model",
         )
     else:
-        progress_placeholder.progress(1.0)
-        step_bar_placeholder.markdown(render_step_bar(done_up_to=len(STEPS)-1), unsafe_allow_html=True)
-        status_placeholder.markdown(
-            f'<span class="badge-done">DONE</span>'
-            f'<span style="margin-left:0.75rem;color:rgba(47,60,77,0.75);font-size:0.88rem;">'
-            f'All 9 steps completed successfully! &nbsp;&middot;&nbsp; ⏱️ Total time: {elapsed_total:.1f}s</span>',
+        llm_model = selected_model_option
+        st.session_state["llm_model"] = selected_model_option
+
+    st.markdown('<div class="config-section">Pipeline Parameters</div>', unsafe_allow_html=True)
+    top_k_protocols = st.slider(
+        "Top-K Protocols", 1, 10, def_top_k, 1,
+        help="Number of top-scored protocols in the final report.",
+        key="top_k",
+    )
+    max_papers = st.slider(
+        "Max Papers per Source", 1, 20, def_max_papers, 1,
+        help="Maximum papers fetched from each search API.",
+        key="max_papers",
+    )
+    max_depth = st.slider(
+        "Max Citation Recursion Depth", 0, 5, def_max_depth, 1,
+        help="Depth of the recursive citation investigator (0 = no recursion).",
+        key="max_depth",
+    )
+
+    st.markdown('<div class="config-section">API Keys</div>', unsafe_allow_html=True)
+    openrouter_key = st.text_input(
+        "OpenRouter API Key (required)",
+        value=def_openrouter_key,
+        type="password",
+        placeholder="sk-or-...",
+        help="https://openrouter.ai/keys (auto-loaded from .env if available)",
+        key="openrouter_key",
+    )
+
+    with st.expander("Optional API Keys", expanded=False):
+        elsevier_key    = st.text_input("Elsevier API Key", value=def_elsevier_key, type="password",
+                              placeholder="Leave blank to skip", key="elsevier_key")
+        semantic_key    = st.text_input("Semantic Scholar API Key", value=def_semantic_key, type="password",
+                              placeholder="Leave blank to skip", key="semantic_key")
+        unpaywall_email = st.text_input("Unpaywall Email", value=def_unpaywall_email,
+                              placeholder="you@institution.edu", key="unpaywall_email")
+        ncbi_key        = st.text_input("NCBI (PubMed) API Key", value=def_ncbi_key, type="password",
+                              placeholder="Leave blank to skip", key="ncbi_key")
+
+    st.markdown(
+        f'<p style="font-size:0.65rem;color:rgba(253,252,245,0.35);margin-top:0.4rem;">'
+        f'Keys loaded from .env when present. Session changes are temporary.</p>',
+        unsafe_allow_html=True,
+    )
+
+
+# ── RIGHT: Prompt + Execution & Results ───────────────────────────────────────
+with col_main:
+    st.markdown(
+        f'<p style="font-size:0.72rem;font-weight:700;letter-spacing:0.10em;'
+        f'text-transform:uppercase;color:{RED};margin-bottom:0.4rem;">'
+        f'Protocol Request</p>',
+        unsafe_allow_html=True,
+    )
+
+    user_prompt = st.text_area(
+        label="Protocol request",
+        label_visibility="collapsed",
+        placeholder=(
+            "Describe the protocol you need. "
+            "e.g. Protocol for CRISPR-Cas9 gene editing in human iPSC cell lines "
+            "with electroporation delivery..."
+        ),
+        height=75,
+        key="user_prompt",
+    )
+
+    col_btn, col_hint = st.columns([1, 2])
+    with col_btn:
+        run_button = st.button("Generate Protocol", use_container_width=True, key="run_btn")
+    with col_hint:
+        st.markdown(
+            f'<p style="color:rgba(47,60,77,0.45);font-size:0.80rem;padding-top:0.6rem;">'
+            f'Searches multiple academic databases, extracts and scores protocols, '
+            f'and writes a Markdown report.</p>',
             unsafe_allow_html=True,
         )
 
-        if output_path and Path(output_path).exists():
-            report_text = Path(output_path).read_text(encoding="utf-8")
-            st.markdown("---")
-            tab_report, tab_raw = st.tabs(["📄 Protocol Report", "📝 Raw Markdown"])
+    # Placeholders for execution progress and results inside right column
+    exec_container = st.container()
 
-            with tab_report:
-                st.markdown(f'<div class="result-box">{report_text}</div>', unsafe_allow_html=True)
+    if run_button:
+        with exec_container:
+            prompt_text = st.session_state.get("user_prompt", "").strip()
+            api_key     = st.session_state.get("openrouter_key", "").strip()
 
-            with tab_raw:
-                st.code(report_text, language="markdown")
+            if not prompt_text:
+                st.error("Please enter a protocol description before running.")
+                st.stop()
+            if not api_key:
+                st.error("An OpenRouter API Key is required. Enter it in the configuration panel.")
+                st.stop()
 
-            st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
-            st.download_button(
-                label="📥 Download Protocol Report (.md)",
-                data=report_text.encode("utf-8"),
-                file_name=Path(output_path).name,
-                mime="text/markdown",
-                key="download_report_btn",
+            patch_settings()
+
+            st.markdown("<hr>", unsafe_allow_html=True)
+            status_placeholder   = st.empty()
+            step_bar_placeholder = st.empty()
+            metrics_placeholder  = st.empty()
+            details_placeholder  = st.empty()
+            result_placeholder   = st.empty()
+
+            # Initial UI state
+            status_placeholder.markdown(
+                f'<span class="badge-running">RUNNING</span>'
+                f'<span style="margin-left:0.75rem;color:rgba(47,60,77,0.65);font-size:0.88rem;">'
+                f'Starting pipeline...</span>',
+                unsafe_allow_html=True,
             )
-        else:
-            result_placeholder.info("Pipeline completed, but output file was not found.")
+            step_bar_placeholder.markdown(render_step_bar(active=0), unsafe_allow_html=True)
+
+            metrics = {
+                "queries": 0,
+                "raw_papers": 0,
+                "unique_papers": 0,
+                "full_text_papers": 0,
+                "plain_text_papers": 0,
+                "filtered_papers": 0,
+                "protocols_extracted": 0,
+                "protocols_scored": 0,
+            }
+            metrics_placeholder.markdown(render_kpi_cards(metrics), unsafe_allow_html=True)
+
+            # Thread-safe log queue and handler setup
+            log_queue: queue.Queue[str] = queue.Queue()
+            queue_handler = ThreadQueueHandler(log_queue)
+            queue_handler.setFormatter(
+                logging.Formatter("%(asctime)s [%(levelname)s] %(name)s | %(message)s", datefmt="%H:%M:%S")
+            )
+            root_logger = logging.getLogger()
+            root_logger.addHandler(queue_handler)
+
+            # Dictionary to hold output / error from worker thread
+            thread_result: dict[str, str | Path | None] = {"output_path": None, "error": None}
+
+            def worker() -> None:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    import utils.logger as logger_module
+                    logger_module.setup_logging()
+                    import main as main_module
+                    output = loop.run_until_complete(main_module.run_pipeline(prompt_text))
+                    thread_result["output_path"] = output
+                except Exception as exc:
+                    thread_result["error"] = f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}"
+                finally:
+                    loop.close()
+
+            pipeline_thread = threading.Thread(target=worker, daemon=True)
+            start_time = time.time()
+            pipeline_thread.start()
+
+            log_lines: list[str] = []
+            step_details: list[dict[str, str]] = []
+            active_step_idx = 0
+            done_step_idx = -1
+
+            # Main monitoring loop running on Streamlit's script thread
+            while pipeline_thread.is_alive() or not log_queue.empty():
+                # Drain log queue
+                updated = False
+                while not log_queue.empty():
+                    try:
+                        line = log_queue.get_nowait()
+                        log_lines.append(line)
+                        updated = True
+
+                        # Parse Step progress and details from logs
+                        for step_num in range(1, 10):
+                            if f"[Step {step_num}] START" in line:
+                                active_step_idx = step_num - 1
+                            if f"[Step {step_num}] DONE" in line:
+                                done_step_idx = step_num - 1
+
+                        # Parse specific metrics from log lines
+                        if "concept_queries=" in line:
+                            try:
+                                q_cnt = int(line.split("concept_queries=")[1].split()[0])
+                                metrics["queries"] = q_cnt
+                                step_details.append({
+                                    "title": "Step 1: Query Expansion Complete",
+                                    "body": f"Extracted research intent and generated {q_cnt} targeted concept queries."
+                                })
+                            except Exception:
+                                pass
+                        if "raw_records=" in line:
+                            try:
+                                r_cnt = int(line.split("raw_records=")[1].split()[0])
+                                metrics["raw_papers"] = r_cnt
+                                step_details.append({
+                                    "title": "Step 2: Database Search Complete",
+                                    "body": f"Retrieved {r_cnt} raw paper records across configured academic search APIs."
+                                })
+                            except Exception:
+                                pass
+                        if "[Step 3] DONE" in line and "output=" in line:
+                            try:
+                                u_cnt = int(line.split("output=")[1].split()[0])
+                                metrics["unique_papers"] = u_cnt
+                                step_details.append({
+                                    "title": "Step 3: Metadata Filter Complete",
+                                    "body": f"Deduplicated and validated DOIs. Kept {u_cnt} unique papers."
+                                })
+                            except Exception:
+                                pass
+                        if "[Step 4] DONE" in line and "output=" in line:
+                            try:
+                                ft_cnt = int(line.split("output=")[1].split()[0])
+                                metrics["full_text_papers"] = ft_cnt
+                                step_details.append({
+                                    "title": "Step 4: Full-Text Retrieval Complete",
+                                    "body": f"Fetched full-text body (PDF/XML/HTML) for {ft_cnt} papers."
+                                })
+                            except Exception:
+                                pass
+                        if "[Step 5] DONE" in line and "output=" in line:
+                            try:
+                                pt_cnt = int(line.split("output=")[1].split()[0])
+                                metrics["plain_text_papers"] = pt_cnt
+                                step_details.append({
+                                    "title": "Step 5: Text Extraction Complete",
+                                    "body": f"Parsed {pt_cnt} papers into normalized plain text."
+                                })
+                            except Exception:
+                                pass
+                        if "[Step 6] DONE" in line and "output=" in line:
+                            try:
+                                fl_cnt = int(line.split("output=")[1].split()[0])
+                                metrics["filtered_papers"] = fl_cnt
+                                step_details.append({
+                                    "title": "Step 6: Post-Extraction Filter Complete",
+                                    "body": f"{fl_cnt} papers satisfied text length constraints (10k - 200k chars)."
+                                })
+                            except Exception:
+                                pass
+                        if "[Step 7] DONE" in line and "output=" in line:
+                            try:
+                                pr_cnt = int(line.split("output=")[1].split()[0])
+                                metrics["protocols_extracted"] = pr_cnt
+                                step_details.append({
+                                    "title": "Step 7: Recursive Protocol Extraction Complete",
+                                    "body": f"Extracted and resolved {pr_cnt} protocol intervals and inherited citations."
+                                })
+                            except Exception:
+                                pass
+                        if "[Step 8] DONE" in line and "output=" in line:
+                            try:
+                                sc_cnt = int(line.split("output=")[1].split()[0])
+                                metrics["protocols_scored"] = sc_cnt
+                                step_details.append({
+                                    "title": "Step 8: Protocol Scoring Complete",
+                                    "body": f"Evaluated and re-scored {sc_cnt} extracted protocols."
+                                })
+                            except Exception:
+                                pass
+
+                    except queue.Empty:
+                        break
+                elapsed = time.time() - start_time
+                curr_step_name = STEPS[active_step_idx] if 0 <= active_step_idx < len(STEPS) else "Processing..."
+
+                status_placeholder.markdown(
+                    f'<span class="badge-running">RUNNING</span>'
+                    f'<span style="margin-left:0.75rem;color:rgba(47,60,77,0.75);font-size:0.88rem;">'
+                    f'Step {active_step_idx + 1} / {len(STEPS)} &nbsp;&mdash;&nbsp; <b>{curr_step_name}</b> '
+                    f'&nbsp;&middot;&nbsp; ⏱️ {elapsed:.1f}s</span>',
+                    unsafe_allow_html=True,
+                )
+                if updated:
+                    step_bar_placeholder.markdown(
+                        render_step_bar(active=active_step_idx, done_up_to=done_step_idx),
+                        unsafe_allow_html=True,
+                    )
+                    metrics_placeholder.markdown(render_kpi_cards(metrics), unsafe_allow_html=True)
+    
+                    # Render live step output stream
+                    if step_details:
+                        details_html = "".join([
+                            f'<div class="step-detail-card">'
+                            f'<div class="step-detail-title">{d["title"]}</div>'
+                            f'<div class="step-detail-body">{d["body"]}</div>'
+                            f'</div>'
+                            for d in step_details[-1:]
+                        ])
+                        details_placeholder.markdown(details_html, unsafe_allow_html=True)
+    
+
+
+                time.sleep(0.25)
+
+            # Clean up handler
+            root_logger.removeHandler(queue_handler)
+
+            elapsed_total = time.time() - start_time
+            output_path = thread_result.get("output_path")
+            error_msg = thread_result.get("error")
+
+            if error_msg:
+                st.session_state.pipeline_error = error_msg
+                st.session_state.err_step_idx = min(done_step_idx + 1, len(STEPS) - 1)
+                st.session_state.pipeline_done = True
+                st.session_state.elapsed_total = elapsed_total
+            else:
+                st.session_state.pipeline_error = None
+                st.session_state.output_path = output_path
+                st.session_state.report_text = None
+                if output_path and Path(output_path).exists():
+                    st.session_state.report_text = Path(output_path).read_text(encoding="utf-8")
+                st.session_state.pipeline_done = True
+                st.session_state.elapsed_total = elapsed_total
+
+            # Forcing a rerun so the results render outside the if run_button block
+            st.rerun()
+
+    if st.session_state.get("pipeline_done"):
+        with exec_container:
+            st.markdown("<hr>", unsafe_allow_html=True)
+            if st.session_state.get("pipeline_error"):
+                err_step_idx = st.session_state.err_step_idx
+                st.markdown(
+                    render_step_bar(done_up_to=err_step_idx-1, error_at=err_step_idx),
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f'<span class="badge-error">ERROR</span>'
+                    f'<span style="margin-left:0.75rem;color:rgba(47,60,77,0.75);font-size:0.88rem;">'
+                    f'Pipeline failed at Step {err_step_idx + 1} ({STEPS[err_step_idx]}) &nbsp;&middot;&nbsp; ⏱️ {st.session_state.elapsed_total:.1f}s</span>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f"<div class='result-box' style='border-color:rgba(209,35,43,0.45);'>"
+                    f"<p style='font-weight:700;color:{RED};margin-bottom:0.5rem;'>Pipeline Error Details</p>"
+                    f"<pre style='font-size:0.72rem;color:{DARK_NAVY};"
+                    f"white-space:pre-wrap;word-break:break-word;'>{st.session_state.pipeline_error}</pre></div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(render_step_bar(done_up_to=len(STEPS)-1), unsafe_allow_html=True)
+                st.markdown(
+                    f'<span class="badge-done">DONE</span>'
+                    f'<span style="margin-left:0.75rem;color:rgba(47,60,77,0.75);font-size:0.88rem;">'
+                    f'All 9 steps completed successfully! &nbsp;&middot;&nbsp; ⏱️ Total time: {st.session_state.elapsed_total:.1f}s</span>',
+                    unsafe_allow_html=True,
+                )
+
+                report_text = st.session_state.get("report_text")
+                if report_text:
+                    st.markdown("---")
+                    
+                    st.download_button(
+                        label="📥 Download Protocol Report (.md)",
+                        data=report_text.encode("utf-8"),
+                        file_name=Path(st.session_state.output_path).name,
+                        mime="text/markdown",
+                        key="download_report_btn",
+                    )
+                    st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+                    
+                    tab_report, tab_raw = st.tabs(["📄 Protocol Report", "📝 Raw Markdown"])
+
+                    with tab_report:
+                        st.markdown(f'<div class="result-box">{report_text}</div>', unsafe_allow_html=True)
+
+                    with tab_raw:
+                        st.code(report_text, language="markdown")
+                else:
+                    st.info("Pipeline completed, but output file was not found.")
 
 # -- Footer --------------------------------------------------------------------
 st.markdown("<br><hr>", unsafe_allow_html=True)

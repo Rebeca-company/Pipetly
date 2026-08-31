@@ -1,12 +1,14 @@
-# Pipetly — Biomedical Protocol Extractor
+# Prunia (formerly Pipetly) — Biomedical Protocol Extractor
 
-Pipetly is an automated AI-powered pipeline that extracts structured, step-by-step experimental protocols from biomedical scientific literature. Given a natural-language research question, it retrieves papers from multiple academic databases, fetches and processes their full texts, and uses LLMs to build a complete, reproducible protocol — including details that the primary paper delegates to cited references.
+Prunia is an automated AI-powered pipeline that extracts structured, step-by-step experimental protocols from biomedical scientific literature. Given a natural-language research question, it retrieves papers from multiple academic databases, fetches and processes their full texts, and uses LLMs to build a complete, reproducible protocol — including details that the primary paper delegates to cited references.
 
 All LLM calls are routed through **[OpenRouter](https://openrouter.ai)**, so any model available there can be used with a single configuration change.
 
 ---
 
 ## How it works — 9-step pipeline
+
+![Architecture Diagram](docs/architecture_general.png)
 
 ```
 User prompt
@@ -33,7 +35,7 @@ User prompt
 [Step 7] Recursive Protocol Extraction → LLM extracts protocol + follows cited refs
     │
     ▼
-[Step 8] Protocol Scoring        → LLM re-scores fragments; keeps score > 60
+[Step 8] Protocol Scoring        → LLM re-scores and ranks protocols
     │
     ▼
 [Step 9] Final Formatting        → Markdown report · token & time telemetry
@@ -51,8 +53,9 @@ After every step, the intermediate output is written as JSON to `intermediate_ou
 ## Repository Structure
 
 ```
-Pipetly/
-├── main.py                      # Entry point — runs the full pipeline
+Prunia/
+├── app.py                       # Streamlit UI (Run this to start the app)
+├── main.py                      # Core entry point — runs the full pipeline
 ├── config.py                    # Settings (pydantic-settings, .env-based)
 ├── requirements.txt             # Python dependencies
 ├── .env.example                 # Template for environment variables
@@ -136,35 +139,32 @@ Key pipeline parameters can also be overridden via environment variable (they ma
 
 | Variable | Default | Description |
 |---|---|---|
-| `MAX_PAPERS_PER_SOURCE` | `1` | Results fetched per query per API |
+| `MAX_PAPERS_PER_SOURCE` | `3` | Results fetched per query per API |
+| `MAX_CITATION_DEPTH` | `2` | Recursive citation-investigator depth |
 | `FULL_TEXT_MIN_CHARS` | `10000` | Minimum accepted full-text length |
 | `FULL_TEXT_MAX_CHARS` | `200000` | Maximum accepted full-text length |
-| `TOP_K_PROTOCOLS` | `1` | Number of top protocols to include in the final report |
-| `LLM_MAX_CONCURRENT` | `20` | Max concurrent LLM calls (Steps 7, 8, 9) |
+| `TOP_K_PROTOCOLS` | `3` | Number of top protocols to include in the final report |
+| `LLM_MAX_CONCURRENT` | `5` | Max concurrent LLM calls (Steps 7, 8, 9) |
 
 ---
 
 ## Usage
 
+The application provides a fully-featured, compact web interface built with Streamlit. To launch the UI, simply run:
+
 ```bash
-python main.py "your research question or protocol objective"
+python -m streamlit run app.py
 ```
 
-**Example:**
-```bash
-python main.py "protocol for CRISPR-Cas9 gene editing in human cell lines"
-```
+This will open your browser at `http://localhost:8501`. 
 
-The pipeline will:
-1. Print progress logs to the console (and per-step log files if `EXPORT_STAGE_LOGS=true`).
-2. Write intermediate JSON checkpoints to `intermediate_outputs/`.
-3. Save the final Markdown report to `output/`.
-4. Print token usage and estimated cost at the end.
+In the web interface you can:
+1. **Configure API Keys**: Enter your OpenRouter key (required) and other database keys in the left sidebar.
+2. **Search**: Enter your research question or protocol objective.
+3. **Monitor Progress**: Watch the pipeline progress through the 9 steps in real time.
+4. **View and Download**: Inspect the raw markdown output directly in the app or download the final Markdown report.
 
-**Switching models** without editing `.env`:
-```bash
-LLM_MODEL_GENERAL=google/gemini-3-flash-preview python main.py "your query"
-```
+*(Note: While `main.py` is still available for headless execution, the Streamlit interface is the recommended way to interact with Prunia).*
 
 ---
 

@@ -20,7 +20,10 @@ def setup_logging() -> None:
         level = logging.INFO
 
     root = logging.getLogger()
-    if not root.handlers:
+    root.setLevel(level)
+    
+    has_stream_handler = any(isinstance(h, logging.StreamHandler) for h in root.handlers)
+    if not has_stream_handler:
         console = logging.StreamHandler()
         console.setLevel(level)
         formatter = logging.Formatter(
@@ -29,7 +32,6 @@ def setup_logging() -> None:
         )
         console.setFormatter(formatter)
         root.addHandler(console)
-        root.setLevel(level)
 
 
 def set_stage_logger(stage_name: str | None) -> None:

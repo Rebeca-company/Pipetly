@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     )
 
     # ── LLM ──────────────────────────────────────────────────────────────────
-    openrouter_api_key: str = Field(..., alias="OPENROUTER_API_KEY")
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     
     # Model used for all LLM tasks (query expansion, full-text extraction, formatting, etc.).
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     full_text_min_chars: int = 10_000  # accepted minimum full-text length
     full_text_max_chars: int = 200_000  # accepted maximum full-text length
     top_k_protocols: int = 3  # how many to score/return
-    llm_max_concurrent: int = 20  # shared LLM concurrency for Steps 7, 8 and 9
+    llm_max_concurrent: int = 5  # shared LLM concurrency for Steps 7, 8 and 9
 
     # ── Output ────────────────────────────────────────────────────────────────
     output_dir: str = "output"

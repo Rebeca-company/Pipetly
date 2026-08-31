@@ -3,7 +3,6 @@ from typing import Any, Optional
 
 from config import get_settings
 
-_s = get_settings()
 logger = logging.getLogger(__name__)
 
 
@@ -16,9 +15,10 @@ class BaseLLMProcessor:
             step_name: A short string (e.g., '1', '7', '8', '9') used for telemetry.
         """
         self.step_name = step_name
-        self._base = _s.openrouter_base_url.rstrip("/")
+        settings = get_settings()
+        self._base = settings.openrouter_base_url.rstrip("/")
         self._headers = {
-            "Authorization": f"Bearer {_s.openrouter_api_key}",
+            "Authorization": f"Bearer {settings.openrouter_api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://github.com/pipetly",
             "X-Title": "Pipetly",
