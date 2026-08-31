@@ -10,8 +10,6 @@ All LLM calls are routed through **[OpenRouter](https://openrouter.ai)**, so any
 
 ![Architecture Diagram](docs/architecture_general.png)
 
-```
-
 **Step 7** is the most complex step. It recursively resolves inherited references up to a configurable depth (`max_depth=3`): when the primary paper delegates protocol details to another paper, the extractor fetches that referenced paper and integrates its content into the final protocol.
 
 After every step, the intermediate output is written as JSON to `intermediate_outputs/` so individual steps can be inspected or re-run independently.
