@@ -51,7 +51,7 @@ You are provided with the extracted protocol and the user query that led to its 
 
 IMPORTANT: You do not have access to the original document or to a reference protocol. You must evaluate the provided protocol in a self-contained manner, based on your expert knowledge of what constitutes a complete, coherent, and executable laboratory protocol for the type of technique described.
 
-Evaluate the protocol according to the following 6 metrics, assigning a score from 1 to 5 for each, where:
+Evaluate the protocol according to the following 6 metrics, assigning a score from 1 to 5 (decimals are allowed, e.g., 3.5) for each, where:
 1 = Very poor
 2 = Poor
 3 = Acceptable
@@ -169,7 +169,7 @@ _JUDGE_SCHEMA = {
             "relevance": {
                 "type": "object",
                 "properties": {
-                    "score": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Relevance score (1-5)"},
+                    "score": {"type": "number", "minimum": 1, "maximum": 5, "description": "Relevance score (1-5)"},
                     "justification": {"type": "string", "description": "Maximum 30 words explaining the relevance score"},
                 },
                 "required": ["score", "justification"],
@@ -177,7 +177,7 @@ _JUDGE_SCHEMA = {
             "completeness": {
                 "type": "object",
                 "properties": {
-                    "score": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Completeness score (1-5)"},
+                    "score": {"type": "number", "minimum": 1, "maximum": 5, "description": "Completeness score (1-5)"},
                     "justification": {"type": "string", "description": "Maximum 30 words explaining the completeness score"},
                 },
                 "required": ["score", "justification"],
@@ -185,7 +185,7 @@ _JUDGE_SCHEMA = {
             "parameter_consistency": {
                 "type": "object",
                 "properties": {
-                    "score": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Internal parameter consistency score (1-5)"},
+                    "score": {"type": "number", "minimum": 1, "maximum": 5, "description": "Internal parameter consistency score (1-5)"},
                     "justification": {"type": "string", "description": "Maximum 30 words explaining the parameter consistency score"},
                 },
                 "required": ["score", "justification"],
@@ -193,7 +193,7 @@ _JUDGE_SCHEMA = {
             "executability": {
                 "type": "object",
                 "properties": {
-                    "score": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Executability score (1-5)"},
+                    "score": {"type": "number", "minimum": 1, "maximum": 5, "description": "Executability score (1-5)"},
                     "justification": {"type": "string", "description": "Maximum 30 words explaining the executability score"},
                 },
                 "required": ["score", "justification"],
@@ -201,7 +201,7 @@ _JUDGE_SCHEMA = {
             "structural_coherence": {
                 "type": "object",
                 "properties": {
-                    "score": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Structural coherence score (1-5)"},
+                    "score": {"type": "number", "minimum": 1, "maximum": 5, "description": "Structural coherence score (1-5)"},
                     "justification": {"type": "string", "description": "Maximum 30 words explaining the structural coherence score"},
                 },
                 "required": ["score", "justification"],
@@ -209,7 +209,7 @@ _JUDGE_SCHEMA = {
             "conciseness": {
                 "type": "object",
                 "properties": {
-                    "score": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Conciseness score (1-5)"},
+                    "score": {"type": "number", "minimum": 1, "maximum": 5, "description": "Conciseness score (1-5)"},
                     "justification": {"type": "string", "description": "Maximum 30 words explaining the conciseness score"},
                 },
                 "required": ["score", "justification"],
@@ -392,7 +392,7 @@ if __name__ == "__main__":
 
     setup_logging()
 
-    N_RUNS = 3
+    N_RUNS = 1
     _DEFAULT_DATA = _EVAL_ROOT / "benchmark" / "cases.json"
     _DEFAULT_OUT  = _EVAL_ROOT / "results"
 

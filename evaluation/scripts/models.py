@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 class MetricScore(BaseModel):
     """Score and justification for a single evaluation metric."""
 
-    score: int = Field(..., ge=1, le=5)
+    score: float = Field(..., ge=1, le=5)
     justification: str
 
 

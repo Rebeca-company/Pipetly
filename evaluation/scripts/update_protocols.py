@@ -67,17 +67,29 @@ def main() -> None:
         for k in [k for k in protocols_dict if k.startswith("pipetly_model")]:
             del protocols_dict[k]
 
-        # ── 2. Populate gemini_pro from reference_outputs/case_XXX.md ──────
-        ref_file = _REF_OUTPUTS / f"{case_id}.md"
-        if ref_file.exists():
-            ref_text = extract_reference_protocol(ref_file)
+        # ── 2a. Populate gemini_pro from reference_outputs/Gemini_Pro/case_XXX.txt ──────
+        ref_file_pro = _REF_OUTPUTS / "Gemini_Pro" / f"{case_id}.txt"
+        if ref_file_pro.exists():
+            ref_text = extract_reference_protocol(ref_file_pro)
             if ref_text:
                 protocols_dict["gemini_pro"] = ref_text
-                print(f"  [{case_id}] gemini_pro <- reference_outputs/{case_id}.md")
+                print(f"  [{case_id}] gemini_pro <- Gemini_Pro/{case_id}.txt")
             else:
-                print(f"  [{case_id}] Warning: reference file is empty: {ref_file.name}")
+                print(f"  [{case_id}] Warning: reference file is empty: {ref_file_pro.name}")
         else:
-            print(f"  [{case_id}] Warning: no reference file found at {ref_file}")
+            print(f"  [{case_id}] Warning: no reference file found at {ref_file_pro}")
+
+        # ── 2b. Populate geminideepresearch from reference_outputs/Gemini_DeepResearch/case_XXX.md ──────
+        ref_file_dr = _REF_OUTPUTS / "Gemini_DeepResearch" / f"{case_id}.md"
+        if ref_file_dr.exists():
+            ref_text = extract_reference_protocol(ref_file_dr)
+            if ref_text:
+                protocols_dict["geminideepresearch"] = ref_text
+                print(f"  [{case_id}] geminideepresearch <- Gemini_DeepResearch/{case_id}.md")
+            else:
+                print(f"  [{case_id}] Warning: reference file is empty: {ref_file_dr.name}")
+        else:
+            print(f"  [{case_id}] Warning: no reference file found at {ref_file_dr}")
 
         # ── 3. Populate pipetly_<model> from runs/<case_id>_<model>/ ───────
         for run_dir in sorted(_RUNS_DIR.glob(f"{case_id}_*")):
@@ -98,7 +110,33 @@ def main() -> None:
             else:
                 print(f"  [{case_id}] Warning: final_output.md not found in {run_dir.name}")
 
-        case["protocols"] = protocols_dict
+        # ── 4. Reorder keys according to requested priority ────────────────────
+        ordered_protocols = {}
+        
+        if "benchmark" in protocols_dict:
+            ordered_protocols["benchmark"] = protocols_dict["benchmark"]
+        if "gemini_pro" in protocols_dict:
+            ordered_protocols["gemini_pro"] = protocols_dict["gemini_pro"]
+        if "geminideepresearch" in protocols_dict:
+            ordered_protocols["geminideepresearch"] = protocols_dict["geminideepresearch"]
+            
+        # Add pipetly models in order: gemini, deepseek, mimo
+        for k in sorted(protocols_dict.keys()):
+            if k.startswith("pipetly_gemini"):
+                ordered_protocols[k] = protocols_dict[k]
+        for k in sorted(protocols_dict.keys()):
+            if k.startswith("pipetly_deepseek"):
+                ordered_protocols[k] = protocols_dict[k]
+        for k in sorted(protocols_dict.keys()):
+            if k.startswith("pipetly_mimo"):
+                ordered_protocols[k] = protocols_dict[k]
+                
+        # Add any other leftover keys
+        for k in protocols_dict:
+            if k not in ordered_protocols:
+                ordered_protocols[k] = protocols_dict[k]
+
+        case["protocols"] = ordered_protocols
 
     _CASES_FILE.write_text(json.dumps(cases, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\nUpdated {_CASES_FILE} successfully.")

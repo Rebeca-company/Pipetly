@@ -165,7 +165,7 @@ async def run_pipeline(user_prompt: str) -> Path:
     # ── Step 7: Recursive Protocol Extraction (7.1-7.4) ──────────────────────
     set_stage_logger("step7_protocol_extraction")
     logger.info("[Step 7] START | Recursive Protocol Extraction")
-    extractor = ProtocolExtractor(max_depth=3)
+    extractor = ProtocolExtractor(max_depth=_s.max_citation_depth)
     protocols = await extractor.extract_all(filtered, expanded.intent)
     step7_token_events = extractor.get_llm_token_events()
 
