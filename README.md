@@ -1,4 +1,4 @@
-# Prunia (formerly Pipetly) — Biomedical Protocol Extractor
+# Prunia — Biomedical Protocol Extractor
 
 Prunia is an automated AI-powered pipeline that extracts structured, step-by-step experimental protocols from biomedical scientific literature. Given a natural-language research question, it retrieves papers from multiple academic databases, fetches and processes their full texts, and uses LLMs to build a complete, reproducible protocol — including details that the primary paper delegates to cited references.
 
@@ -10,38 +10,6 @@ All LLM calls are routed through **[OpenRouter](https://openrouter.ai)**, so any
 
 ![Architecture Diagram](docs/architecture_general.png)
 
-```
-User prompt
-    │
-    ▼
-[Step 1] Query Expansion        → structured search queries + intent
-    │
-    ▼
-[Step 2] Paper & Metadata Search → raw records from 6 search APIs (concurrent)
-    │
-    ▼
-[Step 3] Metadata Filter         → deduplicate · require a valid DOI
-    │
-    ▼
-[Step 4] Full-Text Retrieval     → PDF / XML / HTML from 6 retrieval APIs
-    │
-    ▼
-[Step 5] Text Extraction         → clean plain text (abstract fallback)
-    │
-    ▼
-[Step 6] Post-Extraction Filter  → keep papers within accepted length bounds
-    │
-    ▼
-[Step 7] Recursive Protocol Extraction → LLM extracts protocol + follows cited refs
-    │
-    ▼
-[Step 8] Protocol Scoring        → LLM re-scores and ranks protocols
-    │
-    ▼
-[Step 9] Final Formatting        → Markdown report · token & time telemetry
-    │
-    ▼
-output/<timestamp>.md
 ```
 
 **Step 7** is the most complex step. It recursively resolves inherited references up to a configurable depth (`max_depth=3`): when the primary paper delegates protocol details to another paper, the extractor fetches that referenced paper and integrates its content into the final protocol.
